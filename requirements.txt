@@ -1,0 +1,5 @@
+schedule
+selenium
+python-dotenv
+requests
+holidays
