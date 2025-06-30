@@ -1,5 +1,4 @@
-schedule
-selenium
-requests
-line-bot-sdk
 flask
+line-bot-sdk
+python-dotenv
+
