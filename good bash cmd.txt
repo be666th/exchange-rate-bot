@@ -1,0 +1,12 @@
+PC###
+cd /c/Users/boyd1/exchange-rate-bot
+
+git status
+git add app.py # อันนี้แค่ file เดียว
+
+
+git add .    # อันนี้ upload ทั้งหมด
+
+
+
+

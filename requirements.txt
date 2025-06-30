@@ -1,7 +1,4 @@
 schedule
 selenium
-python-dotenv
 requests
-holidays
-flask
 line-bot-sdk
