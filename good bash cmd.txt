@@ -10,4 +10,12 @@ git add .    # อันนี้ upload ทั้งหมด
 git push
 
 
+/////
+ขั้นตอน Commit + Push
+git add requirements.txt app.py
+git commit -m "feat: minimal script to print Group ID"
+git push
+
+
+
 
