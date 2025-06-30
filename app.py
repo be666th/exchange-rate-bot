@@ -1,33 +1,68 @@
-from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
+import time
+import schedule
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from linebot import LineBotApi
+from linebot.models import TextSendMessage
 
-app = Flask(__name__)
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+GROUP_ID = os.getenv("GROUP_ID")
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+print("LINE_CHANNEL_ACCESS_TOKEN =", LINE_CHANNEL_ACCESS_TOKEN)
+print("GROUP_ID =", GROUP_ID)
 
-@app.route("/callback", methods=['POST'])
-def callback():
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+print("✅ LineBotApi initialized successfully")
 
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    print("✅ Group ID:", event.source.group_id)
-    # ตอบกลับข้อความเพื่อให้ bot ไม่ silent
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextMessage(text="รับข้อความแล้ว")
+# 🔎 Test push message (comment out if not testing)
+if GROUP_ID:
+    line_bot_api.push_message(
+        GROUP_ID,
+        TextSendMessage(text="✅ Bot ทดสอบส่งข้อความสำเร็จ")
+    )
+    print("✅ Push message sent.")
+else:
+    print("⚠️ GROUP_ID is None. Please check your .env or find correct group_id")
+
+
+def capture_and_send():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    driver = webdriver.Chrome(options=chrome_options)
+
+    # Capture BOT
+    url_bot = "https://www.bot.or.th/th/statistics/exchange-rate.html"
+    driver.get(url_bot)
+    driver.implicitly_wait(5)
+    bot_img = "/tmp/bot.png"
+    driver.save_screenshot(bot_img)
+
+    # Capture BBL
+    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+    driver.get(url_bbl)
+    driver.implicitly_wait(5)
+    bbl_img = "/tmp/bbl.png"
+    driver.save_screenshot(bbl_img)
+
+    driver.quit()
+
+    line_bot_api.push_message(
+        GROUP_ID,
+        TextSendMessage(text="✅ Capture เสร็จแล้ว แต่ต้อง upload image เป็น public URL ก่อนถึงจะส่งภาพได้")
     )
 
+schedule.every().day.at("08:31").do(capture_and_send)
+
 if __name__ == "__main__":
-    app.run()
+    while True:
+        schedule.run_pending()
+        time.sleep(30)

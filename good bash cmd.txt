@@ -7,6 +7,7 @@ git add app.py # อันนี้แค่ file เดียว
 
 git add .    # อันนี้ upload ทั้งหมด
 
+git push
 
 
 
