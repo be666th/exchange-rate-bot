@@ -2,6 +2,8 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage
+from linebot.models import TextSendMessage
+
 
 import os
 from dotenv import load_dotenv
@@ -31,6 +33,18 @@ def handle_message(event):
         event.reply_token,
         TextSendMessage(text="✅ Bot received your message")
     )
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    print("=== EVENT ===")
+    print(event)
+    print("Group ID:", event.source.group_id)
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text="✅ Bot received your message")
+    )
+
 
 if __name__ == "__main__":
     import os
