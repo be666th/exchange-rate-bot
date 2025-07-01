@@ -1,53 +1,51 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage
-from linebot.models import TextSendMessage
-
-
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
-handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+@app.route("/", methods=['GET'])
+def health_check():
+    return "OK"
 
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
-    print("Request body: " + body)  # ✅ print event JSON เพื่อตรวจสอบ group_id
-
     try:
         handler.handle(body, signature)
-    except InvalidSignatureError:
+    except Exception as e:
+        print("❌ Error:", e)
         abort(400)
     return 'OK'
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    print("✅ Group ID:", event.source.group_id)  # ✅ print group_id ที่นี่
+    # Print full event for debug
+    print("🔧 Event =", event)
+
+    # Check if message is from group
+    if hasattr(event.source, 'group_id'):
+        group_id = event.source.group_id
+        print("✅ Group ID =", group_id)
+        reply = f"✅ This is group.\nGroup ID: {group_id}"
+    else:
+        reply = "✅ This is not from group chat."
+
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(text="✅ Bot received your message")
+        TextSendMessage(text=reply)
     )
-
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    print("=== EVENT ===")
-    print(event)
-    print("Group ID:", event.source.group_id)
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text="✅ Bot received your message")
-    )
-
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
+    app.run(host="0.0.0.0", port=5000)
