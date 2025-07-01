@@ -1,49 +1,36 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent
+from linebot.models import MessageEvent, TextMessage
 
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
 app = Flask(__name__)
 
-# LINE credentials
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
+handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running."
-
-
-@app.route("/callback", methods=["POST"])
+@app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers["X-Line-Signature"]
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
+    print("Request body: " + body)  # ✅ print event JSON เพื่อตรวจสอบ group_id
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
+    return 'OK'
 
-    return "OK"
-
-
-@handler.add(MessageEvent)
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    # Print Group ID when any message is received
-    if hasattr(event.source, 'group_id'):
-        print("🔎 Group ID =", event.source.group_id)
-    else:
-        print("🔎 This event does not come from a group.")
+    print("✅ Group ID:", event.source.group_id)  # ✅ print group_id ที่นี่
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text="✅ Bot received your message")
+    )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
+    app.run()
