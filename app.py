@@ -45,4 +45,5 @@ def handle_message(event):
         print("🔎 This event does not come from a group.")
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
