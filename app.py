@@ -1,10 +1,9 @@
-# app.py
+# app.py (Production final refactor)
+
 from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import time
-import schedule
 import cloudinary
 import cloudinary.uploader
 from selenium import webdriver
@@ -12,13 +11,34 @@ from selenium.webdriver.chrome.options import Options
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
-# Load environment variables
+# ========== CONFIG ==========
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
-def capture_exchange_rate():
-    """Capture exchange rate page screenshot and return local file path"""
+cloudinary.config(
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key = os.getenv("CLOUDINARY_API_KEY"),
+    api_secret = os.getenv("CLOUDINARY_API_SECRET")
+)
+
+# ========== FUNCTIONS ==========
+
+def upload_image(file_path, folder="exchange-rate"):
+    """Upload image to Cloudinary and return secure URL."""
+    response = cloudinary.uploader.upload(
+        file_path,
+        folder=folder,
+        use_filename=True,
+        unique_filename=False,
+        overwrite=True
+    )
+    print(f"✅ Uploaded to Cloudinary: {response['secure_url']}")
+    return response["secure_url"]
+
+def capture_and_send():
+    """Capture BBL Exchange Rate page, upload to Cloudinary, and push LINE message."""
+
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -26,51 +46,30 @@ def capture_exchange_rate():
     options.add_argument("--window-size=1920,1080")
 
     driver = webdriver.Chrome(options=options)
-    url = "https://www.bot.or.th/th/statistics/exchange-rate.html"
-    driver.get(url)
+
+    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+    driver.get(url_bbl)
     driver.implicitly_wait(5)
 
-    screenshot_path = "/tmp/exchange_rate.png"
-    driver.save_screenshot(screenshot_path)
+    driver.execute_script("document.body.style.zoom='75%'")
+
+    bbl_img = "bbl_capture.png"
+    driver.save_screenshot(bbl_img)
     driver.quit()
 
-    print(f"✅ Screenshot saved to {screenshot_path}")
-    return screenshot_path
+    print("✅ Screenshot captured.")
 
-# Config Cloudinary
-cloudinary.config(
-    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key = os.getenv("CLOUDINARY_API_KEY"),
-    api_secret = os.getenv("CLOUDINARY_API_SECRET")
-)
+    # Upload to Cloudinary
+    image_url = upload_image(bbl_img, folder="exchange-rate")
 
-def upload_to_cloudinary(image_path):
-    """Upload image to Cloudinary and return public URL"""
-    print("🚀 Uploading image to Cloudinary...")
-    response = cloudinary.uploader.upload(image_path)
-    url = response.get('secure_url')
-    print(f"✅ Uploaded to Cloudinary: {url}")
-    return url
-from linebot.models import ImageSendMessage
-
-def job():
-    print("🚀 Starting job: capture exchange rate and push LINE message")
-    img_path = capture_exchange_rate()
-    public_url = upload_to_cloudinary(img_path)
-    message = ImageSendMessage(
-        original_content_url=public_url,
-        preview_image_url=public_url
+    # Push LINE message
+    line_bot_api.push_message(
+        GROUP_ID,
+        TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
     )
-    line_bot_api.push_message(GROUP_ID, message)
-    print("✅ Push image message sent.")
+    print("✅ LINE push message sent.")
 
-
-
-# Schedule at 08:31 every day
-schedule.every().day.at("08:31").do(job)
-
+# ========== MAIN ==========
 if __name__ == "__main__":
-    print("✅ Exchange Rate Bot started (Render worker mode)")
-    while True:
-        schedule.run_pending()
-        time.sleep(30)
+    print("✅ Exchange Rate Bot started (production mode)")
+    capture_and_send()

@@ -1,0 +1,9 @@
+/root/exchange-rate-bot/app.py:18: LineBotSdkDeprecatedIn30: Call to deprecated class LineBotApi. (Use v3 class; linebot.v3.<feature>. See https://github.com/line/line-bot-sdk-python/blob/master/README.rst for more details.) -- Deprecated since version 3.0.0.
+  line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+✅ Exchange Rate Bot started (Render worker mode)
+Traceback (most recent call last):
+  File "/root/exchange-rate-bot/app.py", line 76, in <module>
+    time.sleep(30)
+KeyboardInterrupt
+/root/exchange-rate-bot/app.py:18: LineBotSdkDeprecatedIn30: Call to deprecated class LineBotApi. (Use v3 class; linebot.v3.<feature>. See https://github.com/line/line-bot-sdk-python/blob/master/README.rst for more details.) -- Deprecated since version 3.0.0.
+  line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
