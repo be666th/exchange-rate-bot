@@ -47,10 +47,15 @@ def capture_bbl_rate():
     driver = webdriver.Chrome(options=options)
 
     driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates")
+    
+    # ซูมออกให้เห็นเนื้อหาโดยไม่โดนแบนเนอร์คุกกี้บัง
+    driver.execute_script("document.body.style.zoom='75%'")
+
     screenshot_path = "/tmp/bbl_rate.png"
     driver.save_screenshot(screenshot_path)
     driver.quit()
     return screenshot_path
+
 
 
 def upload_to_cloudinary(image_path):
