@@ -31,7 +31,7 @@ jobs:
         containerAppName: exchange-rate-bot
         resourceGroup: my-first-docker-rg
         containerAppEnvironment: exchange-rate-bot-env
-        location: westus2
+        location: southeastasia
         targetPort: 8000
         ingress: external
         environmentVariables: |
