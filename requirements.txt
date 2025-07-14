@@ -1,0 +1,11 @@
+python-dotenv
+schedule
+selenium
+cloudinary
+line-bot-sdk
+fastapi
+uvicorn
+requests
+line-bot-sdk
+
+
