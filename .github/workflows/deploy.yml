@@ -34,4 +34,7 @@ jobs:
         location: westus2
         targetPort: 8000
         ingress: external
+        environmentVariables: |
+          LINE_ACCESS_TOKEN=${{ secrets.LINE_ACCESS_TOKEN }}
+          CLOUDINARY_URL=${{ secrets.CLOUDINARY_URL }}
 
