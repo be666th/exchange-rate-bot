@@ -46,7 +46,7 @@ def capture_bbl_rate():
     options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(options=options)
 
-    driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates/Foreign-Exchange-Rates")
+    driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates")
     screenshot_path = "/tmp/bbl_rate.png"
     driver.save_screenshot(screenshot_path)
     driver.quit()
