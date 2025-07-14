@@ -1,8 +1,8 @@
-name: ��� Screenshot and LINE Notify (Daily)
+name: ��� Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # เวลาไทย 08:00 (UTC+7)
+  - cron: '31 1 * * *'   # เวลาไทย 08:31 (UTC+7)
   workflow_dispatch:      # กดรันเองได้
 
 jobs:
