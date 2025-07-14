@@ -18,4 +18,4 @@ RUN apt-get update && apt-get install -y wget gnupg unzip \
 
 COPY . .
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
