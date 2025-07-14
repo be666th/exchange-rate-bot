@@ -1,0 +1,36 @@
+name: Deploy Exchange Rate Bot
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '31 1 * * 1-5'  # Run at 08:31 ICT (01:31 UTC) Mon–Fri
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Print time
+      run: |
+        echo "⏰ UTC time:" && date -u
+        echo "⏰ Thailand time (ICT):" && TZ='Asia/Bangkok' date
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build & Push to Azure Container Registry
+      run: |
+        az acr build --registry ${{ secrets.AZURE_ACR_NAME }} --image exchange-rate-bot:latest .
+
+    - name: Deploy to Azure Container App
+      run: |
+        az containerapp update \
+          --name ${{ secrets.AZURE_APP_NAME }} \
+          --resource-group ${{ secrets.AZURE_RG }} \
+          --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/exchange-rate-bot:latest

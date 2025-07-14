@@ -1,11 +1,10 @@
+fastapi
+uvicorn
 python-dotenv
-schedule
 selenium
 cloudinary
 line-bot-sdk
-fastapi
-uvicorn
-requests
+selenium
+cloudinary
 line-bot-sdk
-
 

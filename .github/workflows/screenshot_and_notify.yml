@@ -1,0 +1,33 @@
+name: ��� Screenshot and LINE Notify (Daily)
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # เวลาไทย 08:00 (UTC+7)
+  workflow_dispatch:      # กดรันเองได้
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run Screenshot + LINE Notify
+      env:
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+        CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+        CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      run: |
+        python runner.py  # ถ้าเรียกผ่านฟังก์ชันจาก app.py
