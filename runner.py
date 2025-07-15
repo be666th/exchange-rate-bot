@@ -11,7 +11,7 @@ cloudinary.config(
 )
 
 
-- name: Run Screenshot + LINE Notify
+# name: Run Screenshot + LINE Notify
   run: python runner.py
   env:
     CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
