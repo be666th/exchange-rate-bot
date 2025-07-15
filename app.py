@@ -42,34 +42,36 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def capture_bbl_rate():
+def capture_and_send():
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(options=options)
 
-    driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates")
+    driver = webdriver.Chrome(options=options)
+    driver.set_window_size(1600, 1400)  # ขยายจอเพื่อให้เห็นทั้งตาราง
 
     try:
-        # ✅ รอและคลิกปุ่ม “ยอมรับทั้งหมด”
+        driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates/Foreign-Exchange-Rates")
+
+        # คลิกยอมรับคุกกี้
         WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
+            EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "ยอมรับทั้งหมด")]'))
         ).click()
-        print("✅ Cookie banner accepted.")
-    except Exception as e:
-        print("⚠️ Cookie banner not found or failed to click:", e)
 
-    # ✅ ซูมออก 75%
-    driver.execute_script("document.body.style.zoom='75%'")
+        # รอให้ตารางโหลดเสร็จ
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
+        )
 
-    # ✅ แคปภาพ
-    screenshot_path = "/tmp/bbl_rate.png"
-    driver.save_screenshot(screenshot_path)
-    driver.quit()
-    return screenshot_path
+        screenshot_path = "screenshot.png"
+        driver.save_screenshot(screenshot_path)
 
+        url = upload_to_cloudinary(screenshot_path)
+        send_line_image_message(url)
 
+    finally:
+        driver.quit()
 
 
 def upload_to_cloudinary(image_path):
