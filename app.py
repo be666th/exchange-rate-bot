@@ -49,26 +49,33 @@ def capture_and_send():
     options.add_argument('--disable-dev-shm-usage')
 
     driver = webdriver.Chrome(options=options)
-    driver.set_window_size(1600, 1400)  # ขยายจอเพื่อให้เห็นทั้งตาราง
+    driver.set_window_size(1600, 1400)
 
     try:
         driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates/Foreign-Exchange-Rates")
 
-        # คลิกยอมรับคุกกี้
-        WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "ยอมรับทั้งหมด")]'))
-        ).click()
+        # รอโหลดหน้าเบื้องต้น
+        time.sleep(3)
 
-        # รอให้ตารางโหลดเสร็จ
-        WebDriverWait(driver, 10).until(
+        # คลิกปุ่ม "ยอมรับทั้งหมด"
+        try:
+            accept_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "ยอมรับทั้งหมด")]'))
+            )
+            accept_button.click()
+        except:
+            print("Cookie banner not found, continue...")
+
+        # รอตารางแสดงอัตราแลกเปลี่ยนโหลด
+        WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
         )
 
         screenshot_path = "screenshot.png"
         driver.save_screenshot(screenshot_path)
 
-        url = upload_to_cloudinary(screenshot_path)
-        send_line_image_message(url)
+        image_url = upload_to_cloudinary(screenshot_path)
+        send_line_image_message(image_url)
 
     finally:
         driver.quit()
