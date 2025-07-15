@@ -38,6 +38,9 @@ def capture_and_send():
     send_line_image_message(url)
     return {"status": "sent", "image_url": url}
 
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 def capture_bbl_rate():
     options = Options()
@@ -48,17 +51,14 @@ def capture_bbl_rate():
 
     driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates")
 
-    # ✅ รอแล้วคลิกปุ่ม "ยอมรับทั้งหมด"
     try:
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
+        # ✅ รอและคลิกปุ่ม “ยอมรับทั้งหมด”
         WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "button#onetrust-accept-btn-handler"))
+            EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
         ).click()
+        print("✅ Cookie banner accepted.")
     except Exception as e:
-        print("Cookie banner not found or error:", e)
+        print("⚠️ Cookie banner not found or failed to click:", e)
 
     # ✅ ซูมออก 75%
     driver.execute_script("document.body.style.zoom='75%'")
@@ -68,6 +68,7 @@ def capture_bbl_rate():
     driver.save_screenshot(screenshot_path)
     driver.quit()
     return screenshot_path
+
 
 
 
