@@ -10,13 +10,9 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
+if __name__ == "__main__":
+    capture_and_send()
 
-# name: Run Screenshot + LINE Notify
 
-  env:
-    CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-    CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-    CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-    LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-    LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+
 
