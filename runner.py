@@ -1,3 +1,4 @@
+import os
 import cloudinary
 from app import capture_and_send
 
