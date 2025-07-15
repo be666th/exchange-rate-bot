@@ -47,10 +47,23 @@ def capture_bbl_rate():
     driver = webdriver.Chrome(options=options)
 
     driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates")
-    
-    # ซูมออกให้เห็นเนื้อหาโดยไม่โดนแบนเนอร์คุกกี้บัง
+
+    # ✅ รอแล้วคลิกปุ่ม "ยอมรับทั้งหมด"
+    try:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button#onetrust-accept-btn-handler"))
+        ).click()
+    except Exception as e:
+        print("Cookie banner not found or error:", e)
+
+    # ✅ ซูมออก 75%
     driver.execute_script("document.body.style.zoom='75%'")
 
+    # ✅ แคปภาพ
     screenshot_path = "/tmp/bbl_rate.png"
     driver.save_screenshot(screenshot_path)
     driver.quit()
