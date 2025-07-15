@@ -1,8 +1,9 @@
+from fastapi import FastAPI
+from dotenv import load_dotenv
 import os
 import time
 import cloudinary
 import cloudinary.uploader
-from fastapi import FastAPI
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -13,81 +14,69 @@ from linebot.models import ImageSendMessage
 
 load_dotenv()
 
-app = FastAPI()
-
-# LINE config
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-
-# Cloudinary config
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-    secure=True
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
+URL = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates-and-Calculators/Foreign-Exchange-Rates"
 
-@app.get("/")
-def read_root():
-    return {"message": "Exchange Rate Bot is live."}
-
-
-@app.get("/capture-and-send")
-def capture_and_send():
-    image_path = capture_bbl_rate()
-    url = upload_to_cloudinary(image_path)
-    send_line_image_message(url)
-    return {"status": "sent", "image_url": url}
+app = FastAPI()
 
 def capture_and_send():
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--force-device-scale-factor=1")
 
-    driver = webdriver.Chrome(options=options)
-    driver.set_window_size(1600, 1400)
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get(URL)
 
+    # ✅ รอให้ปุ่ม "ยอมรับทั้งหมด" แสดงก่อนคลิก
     try:
-        driver.get("https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates/Foreign-Exchange-Rates")
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button#onetrust-accept-btn-handler"))
+        ).click()
+    except:
+        pass  # ถ้าไม่เจอปุ่ม ก็ข้ามไป
 
-        # รอโหลดหน้าเบื้องต้น
-        time.sleep(3)
+    time.sleep(3)  # รอโหลดเนื้อหา
 
-        # คลิกปุ่ม "ยอมรับทั้งหมด"
-        try:
-            accept_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "ยอมรับทั้งหมด")]'))
-            )
-            accept_button.click()
-        except:
-            print("Cookie banner not found, continue...")
+    # ✅ ซูมออก 75% ก่อน capture
+    driver.execute_script("document.body.style.zoom='75%'")
 
-        # รอตารางแสดงอัตราแลกเปลี่ยนโหลด
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
-        )
+    screenshot_path = "bbl_capture.png"
+    driver.save_screenshot(screenshot_path)
+    driver.quit()
 
-        screenshot_path = "screenshot.png"
-        driver.save_screenshot(screenshot_path)
+    # ✅ อัปโหลดขึ้น Cloudinary
+    url = upload_to_cloudinary(screenshot_path)
 
-        image_url = upload_to_cloudinary(screenshot_path)
-        send_line_image_message(image_url)
+    # ✅ ส่ง LINE
+    send_line_image_message(url)
 
-    finally:
-        driver.quit()
-
-
-def upload_to_cloudinary(image_path):
+def upload_to_cloudinary(image_path: str) -> str:
     response = cloudinary.uploader.upload(image_path)
     return response["secure_url"]
 
-
-def send_line_image_message(image_url):
+def send_line_image_message(image_url: str):
+    line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
     image_message = ImageSendMessage(
         original_content_url=image_url,
         preview_image_url=image_url
     )
     line_bot_api.push_message(LINE_GROUP_ID, image_message)
+
+@app.get("/")
+def root():
+    return {"message": "Exchange Rate Bot is live."}
+
+@app.get("/run")
+def run_bot():
+    capture_and_send()
+    return {"message": "Capture and send completed."}
