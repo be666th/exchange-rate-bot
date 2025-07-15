@@ -12,7 +12,7 @@ cloudinary.config(
 
 
 # name: Run Screenshot + LINE Notify
-  run: python runner.py
+
   env:
     CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
     CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
