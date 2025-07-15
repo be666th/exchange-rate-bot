@@ -22,7 +22,8 @@ cloudinary.config(
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
-URL = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates-and-Calculators/Foreign-Exchange-Rates"
+URL = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates"
+
 
 app = FastAPI()
 
