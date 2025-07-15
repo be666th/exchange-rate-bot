@@ -1,10 +1,13 @@
-from fastapi import FastAPI
 import os
-from dotenv import load_dotenv
+import time
 import cloudinary
 import cloudinary.uploader
+from fastapi import FastAPI
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from linebot import LineBotApi
 from linebot.models import ImageSendMessage
 
@@ -37,10 +40,6 @@ def capture_and_send():
     url = upload_to_cloudinary(image_path)
     send_line_image_message(url)
     return {"status": "sent", "image_url": url}
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 def capture_and_send():
     options = Options()
