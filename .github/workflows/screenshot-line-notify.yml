@@ -1,0 +1,4 @@
+on:
+  schedule:
+    - cron: '31 1 * * *'   # เวลาไทย 08:31
+  workflow_dispatch:
