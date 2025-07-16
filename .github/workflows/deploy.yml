@@ -1,40 +1,33 @@
-name: 🚀 Deploy to Azure (Daily Schedule)
+name: 🚀 Deploy to Azure Container App
 
 on:
-  push:
-    branches: [main]
-  schedule:
-  - cron: '31 1 * * *'  # รันทุกวันเวลา 08:31 (เวลาไทย)
-
   workflow_dispatch:
+  schedule:
+    - cron: '30 1 * * *'  # เวลาไทย 08:30 (UTC+7)
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout to the branch
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Build and push container image to registry
-      uses: azure/container-apps-deploy-action@v1
-      with:
-        appSourcePath: .
-        registryUrl: myexchangeacr.azurecr.io
-        registryUsername: ${{ secrets.AZURE_REGISTRY_USERNAME }}
-        registryPassword: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
-        containerAppName: exchange-rate-bot
-        resourceGroup: my-first-docker-rg
-        containerAppEnvironment: exchange-rate-bot-env
-        location: southeastasia
-        targetPort: 8000
-        ingress: external
-        environmentVariables: |
-          LINE_ACCESS_TOKEN=${{ secrets.LINE_ACCESS_TOKEN }}
-          CLOUDINARY_URL=${{ secrets.CLOUDINARY_URL }}
-
+      - name: Deploy to Azure Container App
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          acrName: myexchangeacr
+          containerAppName: exchange-rate-bot
+          resourceGroup: my-first-docker-rg
+          dockerfilePath: Dockerfile
+          targetLabel: exchange-rate-bot
+          buildArguments: |
+            CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+            CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+            CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+            LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+            LINE_GROUP_ID=${{ secrets.LINE_GROUP_ID }}
