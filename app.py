@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -12,12 +11,12 @@ from linebot.models import TextSendMessage
 import traceback
 import time
 
-# ✅ Load .env (ให้แน่ใจว่าทุกกรณีโหลดได้)
+# ✅ Load .env
 load_dotenv()
 
-# ✅ Load environment variables
+# ✅ Load environment variables with fallback
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-GROUP_ID = os.getenv("GROUP_ID")
+GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")  # ✅ fallback
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
@@ -28,11 +27,11 @@ print(f"  LINE_CHANNEL_ACCESS_TOKEN: {'✅' if LINE_CHANNEL_ACCESS_TOKEN else '�
 print(f"  GROUP_ID: {GROUP_ID or '❌ (missing)'}")
 print(f"  CLOUDINARY_CLOUD_NAME: {CLOUDINARY_CLOUD_NAME or '❌'}")
 
-# ✅ Validate critical env
+# ✅ Validate required env
 if not all([LINE_CHANNEL_ACCESS_TOKEN, GROUP_ID, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
-    raise RuntimeError("❌ Missing one or more required environment variables. Check your .env file.")
+    raise RuntimeError("❌ Missing one or more required environment variables. Check your .env or GitHub secrets.")
 
-# ✅ Initialize services
+# ✅ Setup
 app = FastAPI()
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 cloudinary.config(
@@ -50,7 +49,7 @@ def upload_image(file_path, folder="exchange-rate"):
         unique_filename=False,
         overwrite=True
     )
-    print(f"✅ Uploaded to Cloudinary: {response['secure_url']}")
+    print(f"✅ Uploaded: {response['secure_url']}")
     return response["secure_url"]
 
 def capture_and_send(retry=2):
@@ -123,8 +122,8 @@ async def test():
         "status": "ok",
         "env": {
             "LINE_CHANNEL_ACCESS_TOKEN": bool(LINE_CHANNEL_ACCESS_TOKEN),
-            "GROUP_ID": bool(GROUP_ID),
-            "CLOUDINARY_CLOUD_NAME": bool(CLOUDINARY_CLOUD_NAME)
+            "GROUP_ID": GROUP_ID or "❌ missing",
+            "CLOUDINARY_CLOUD_NAME": CLOUDINARY_CLOUD_NAME or "❌ missing"
         }
     }
 
@@ -132,7 +131,7 @@ async def test():
 async def health():
     return {"status": "ok"}
 
-# Optional: for local run
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
