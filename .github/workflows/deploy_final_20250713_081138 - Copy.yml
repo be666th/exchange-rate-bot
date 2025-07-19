@@ -1,0 +1,37 @@
+name: "🚀 Deploy to Azure (Daily Schedule)"
+
+on:
+  schedule:
+    - cron: '31 1 * * 1-5'  # ⏰ 08:31 ICT (Mon-Fri)
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: ⏳ Check out repo
+      uses: actions/checkout@v3
+
+    - name: ⏰ Show current UTC time
+      run: date -u
+
+    - name: ⏰ Show current time in ICT
+      run: |
+        TZ='Asia/Bangkok' date
+
+    - name: 🔐 Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🐳 Build & Push image (via ACR)
+      run: |
+        az acr build --registry ${{ secrets.ACR_NAME }} --image exchange-rate-bot:latest .
+
+    - name: 🚀 Deploy to Azure Container App
+      run: |
+        az containerapp update \
+          --name exchange-rate-bot \
+          --resource-group ${{ secrets.AZURE_RG }} \
+          --image ${{ secrets.ACR_NAME }}.azurecr.io/exchange-rate-bot:latest

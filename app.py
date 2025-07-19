@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+# app.py (Production final refactor)
+
 from dotenv import load_dotenv
 import os
 import time
@@ -8,67 +9,68 @@ from linebot import LineBotApi
 from linebot.models import ImageSendMessage, TextSendMessage
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from datetime import datetime
+from linebot import LineBotApi
+from linebot.models import TextSendMessage
 
-load_dotenv()
+# ========== CONFIG ==========
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+GROUP_ID = os.getenv("GROUP_ID")
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
-app = FastAPI()
-
-# Setup LINE
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
-
-# Setup Cloudinary
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
+# ========== FUNCTIONS ==========
+
+def upload_image(file_path, folder="exchange-rate"):
+    """Upload image to Cloudinary and return secure URL."""
+    response = cloudinary.uploader.upload(
+        file_path,
+        folder=folder,
+        use_filename=True,
+        unique_filename=False,
+        overwrite=True
+    )
+    print(f"✅ Uploaded to Cloudinary: {response['secure_url']}")
+    return response["secure_url"]
+
 def capture_and_send():
-    url = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/Rates-and-Calculators/Foreign-Exchange-Rates"
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    screenshot_filename = f"bbl_capture_{timestamp}.png"
+    """Capture BBL Exchange Rate page, upload to Cloudinary, and push LINE message."""
 
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
 
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.get(url)
+    driver = webdriver.Chrome(options=options)
 
-    try:
-        # รอจน popup ปรากฏ แล้วคลิกปุ่มยอมรับ
-        WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'ยอมรับทั้งหมด')]"))
-        ).click()
+    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+    driver.get(url_bbl)
+    driver.implicitly_wait(5)
 
-        time.sleep(1)
-        driver.save_screenshot(screenshot_filename)
-        print(f"✅ Screenshot saved: {screenshot_filename}")
+    driver.execute_script("document.body.style.zoom='75%'")
 
-        upload_result = cloudinary.uploader.upload(screenshot_filename, folder="exchange-rate/")
-        image_url = upload_result["secure_url"]
-        print(f"📤 Uploaded to Cloudinary: {image_url}")
+    bbl_img = "bbl_capture.png"
+    driver.save_screenshot(bbl_img)
+    driver.quit()
 
-        line_bot_api.push_message(LINE_GROUP_ID, [
-            TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}"),
-            ImageSendMessage(original_content_url=image_url, preview_image_url=image_url)
-        ])
-        print("📨 LINE message sent.")
+    print("✅ Screenshot captured.")
 
-    finally:
-        driver.quit()
+    # Upload to Cloudinary
+    image_url = upload_image(bbl_img, folder="exchange-rate")
 
-@app.get("/")
-def root():
-    return {"message": "Exchange Rate Bot is alive"}
+    # Push LINE message
+    line_bot_api.push_message(
+        GROUP_ID,
+        TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
+    )
+    print("✅ LINE push message sent.")
 
-@app.get("/run")
-def run_task():
+# ========== MAIN ==========
+if __name__ == "__main__":
+    print("✅ Exchange Rate Bot started (production mode)")
     capture_and_send()
-    return {"status": "completed"}
