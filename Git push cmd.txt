@@ -1,0 +1,3 @@
+git add .github/workflows/deploy_bk.yml
+git commit -m "🔧 Add workflow_dispatch to allow manual run from GitHub Actions"
+git push origin main
