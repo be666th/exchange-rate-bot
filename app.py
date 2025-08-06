@@ -74,7 +74,7 @@ def capture_and_send():
     except Exception as e:
         print("❌ Table not loaded:", e)
         driver.quit()
-        return  # ✅ หยุดการทำงานหากโหลดไม่สำเร็จ
+        return
 
     driver.execute_script("document.body.style.zoom='75%'")
     bbl_img = "bbl_capture.png"
@@ -88,7 +88,6 @@ def capture_and_send():
         TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
     )
     print("✅ LINE push message sent.")
-
 
 
         except Exception as e:
