@@ -87,19 +87,19 @@ def capture_and_send():
         driver.quit()
         return
 
-    # ✅ Dump page source for debugging
+    # ✅ Dump page source
     with open("page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
     print("📄 page_source.html saved")
 
-    # ✅ Wait for the table caption
+    # ✅ Wait for visible table
     try:
         WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.XPATH, "//caption[contains(text(),'อัตราแลกเปลี่ยน')]"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate"))
         )
-        print("✅ Table caption found.")
+        print("✅ Table found (fallback selector).")
     except Exception as e:
-        print("❌ Table not found:", e.__class__.__name__, ":", str(e))
+        print("❌ Table still not found:", e.__class__.__name__, ":", str(e))
         driver.save_screenshot("table_not_found.png")
         driver.quit()
         return
@@ -111,7 +111,7 @@ def capture_and_send():
     driver.quit()
     print("✅ Screenshot captured.")
 
-    # ✅ Upload to Cloudinary
+    # ✅ Upload
     image_url = upload_image(bbl_img, folder="exchange-rate")
 
     # ✅ Send to LINE
@@ -119,6 +119,7 @@ def capture_and_send():
     message = f"✅ Exchange Rate ({now}):\n{image_url}"
     line_bot_api.push_message(GROUP_ID, TextSendMessage(text=message))
     print("✅ LINE message sent.")
+
 
 
 # === FastAPI routes ===
