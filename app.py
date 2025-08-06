@@ -62,9 +62,9 @@ def capture_and_send():
 
     try:
         WebDriverWait(driver, 30).until(
-            EC.visibility_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate tbody tr"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*=exchange-rate] table"))
         )
-        print("✅ Table loaded.")
+        print("✅ Table container loaded.")
     except Exception as e:
         print("❌ Table not loaded:", e.__class__.__name__, ":", str(e))
         driver.save_screenshot("error_debug.png")
@@ -83,6 +83,7 @@ def capture_and_send():
         TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
     )
     print("✅ LINE push message sent.")
+
 
 @app.post("/")
 async def webhook(request: Request):
