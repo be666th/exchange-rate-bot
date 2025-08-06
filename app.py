@@ -79,23 +79,28 @@ def capture_and_send():
             break
         except Exception as e:
             print(f"❌ Attempt #{attempt+1} failed:", e.__class__.__name__, ":", str(e))
+            driver.save_screenshot(f"load_fail_{attempt+1}.png")
             time.sleep(3)
 
     if not success:
         print("🛑 Failed to load page after retries")
-        driver.save_screenshot("load_fail_debug.png")
         driver.quit()
         return
 
-    # ✅ Wait for table to appear
+    # ✅ Dump page source for debugging
+    with open("page_source.html", "w", encoding="utf-8") as f:
+        f.write(driver.page_source)
+    print("📄 page_source.html saved")
+
+    # ✅ Wait for the table caption
     try:
         WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*=exchange-rate] table"))
+            EC.presence_of_element_located((By.XPATH, "//caption[contains(text(),'อัตราแลกเปลี่ยน')]"))
         )
-        print("✅ Table found.")
+        print("✅ Table caption found.")
     except Exception as e:
-        print("❌ Table not loaded:", e.__class__.__name__, ":", str(e))
-        driver.save_screenshot("error_debug.png")
+        print("❌ Table not found:", e.__class__.__name__, ":", str(e))
+        driver.save_screenshot("table_not_found.png")
         driver.quit()
         return
 
@@ -114,6 +119,7 @@ def capture_and_send():
     message = f"✅ Exchange Rate ({now}):\n{image_url}"
     line_bot_api.push_message(GROUP_ID, TextSendMessage(text=message))
     print("✅ LINE message sent.")
+
 
 # === FastAPI routes ===
 
