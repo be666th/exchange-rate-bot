@@ -4,15 +4,11 @@ from dotenv import load_dotenv
 import os
 import cloudinary
 import cloudinary.uploader
-# from selenium import webdriver
-# from selenium.webdriver.chrome.options import Options
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 import traceback
 import time
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+
 
 # ✅ Load .env
 load_dotenv()
@@ -55,6 +51,10 @@ def upload_image(file_path, folder="exchange-rate"):
     print(f"✅ Uploaded: {response['secure_url']}")
     return response["secure_url"]
 
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 def capture_and_send():
     options = Options()
     options.add_argument("--headless")
@@ -66,7 +66,6 @@ def capture_and_send():
     url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
     driver.get(url_bbl)
 
-    # ✅ รอให้ตาราง exchange rate โหลดสำเร็จ
     try:
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate"))
@@ -74,6 +73,8 @@ def capture_and_send():
         print("✅ Table loaded.")
     except Exception as e:
         print("❌ Table not loaded:", e)
+        driver.quit()
+        return  # ✅ หยุดการทำงานหากโหลดไม่สำเร็จ
 
     driver.execute_script("document.body.style.zoom='75%'")
     bbl_img = "bbl_capture.png"
@@ -87,6 +88,7 @@ def capture_and_send():
         TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
     )
     print("✅ LINE push message sent.")
+
 
 
         except Exception as e:
