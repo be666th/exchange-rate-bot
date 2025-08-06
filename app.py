@@ -61,7 +61,7 @@ def capture_and_send():
     driver.get(url_bbl)
 
     try:
-        WebDriverWait(driver, 20).until(
+        WebDriverWait(driver, 30).until(
             EC.visibility_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate tbody tr"))
         )
         print("✅ Table loaded.")
