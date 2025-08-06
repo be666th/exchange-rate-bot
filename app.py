@@ -11,8 +11,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import traceback
+import time
+from datetime import datetime
 
+# ✅ Load env
 load_dotenv()
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -27,8 +29,9 @@ print(f"  GROUP_ID: {GROUP_ID or '❌ (missing)'}")
 print(f"  CLOUDINARY_CLOUD_NAME: {CLOUDINARY_CLOUD_NAME or '❌'}")
 
 if not all([LINE_CHANNEL_ACCESS_TOKEN, GROUP_ID, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
-    raise RuntimeError("❌ Missing one or more required environment variables. Check your .env or GitHub secrets.")
+    raise RuntimeError("❌ Missing one or more required environment variables.")
 
+# ✅ Setup clients
 app = FastAPI()
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 cloudinary.config(
@@ -50,40 +53,69 @@ def upload_image(file_path, folder="exchange-rate"):
     return response["secure_url"]
 
 def capture_and_send():
+    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+    print("🌐 URL:", url_bbl)
+
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
 
     driver = webdriver.Chrome(options=options)
-    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
-    driver.get(url_bbl)
 
+    # ✅ Retry loading page
+    success = False
+    for attempt in range(3):
+        try:
+            print(f"🔁 Attempt #{attempt+1} loading page...")
+            driver.set_page_load_timeout(60)
+            driver.get(url_bbl)
+            print("✅ Page loaded.")
+            success = True
+            break
+        except Exception as e:
+            print(f"❌ Attempt #{attempt+1} failed:", e.__class__.__name__, ":", str(e))
+            time.sleep(3)
+
+    if not success:
+        print("🛑 Failed to load page after retries")
+        driver.save_screenshot("load_fail_debug.png")
+        driver.quit()
+        return
+
+    # ✅ Wait for table to appear
     try:
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*=exchange-rate] table"))
         )
-        print("✅ Table container loaded.")
+        print("✅ Table found.")
     except Exception as e:
         print("❌ Table not loaded:", e.__class__.__name__, ":", str(e))
         driver.save_screenshot("error_debug.png")
         driver.quit()
         return
 
+    # ✅ Screenshot
     driver.execute_script("document.body.style.zoom='75%'")
     bbl_img = "bbl_capture.png"
     driver.save_screenshot(bbl_img)
     driver.quit()
-
     print("✅ Screenshot captured.")
-    image_url = upload_image(bbl_img, folder="exchange-rate")
-    line_bot_api.push_message(
-        GROUP_ID,
-        TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
-    )
-    print("✅ LINE push message sent.")
 
+    # ✅ Upload to Cloudinary
+    image_url = upload_image(bbl_img, folder="exchange-rate")
+
+    # ✅ Send to LINE
+    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    message = f"✅ Exchange Rate ({now}):\n{image_url}"
+    line_bot_api.push_message(GROUP_ID, TextSendMessage(text=message))
+    print("✅ LINE message sent.")
+
+# === FastAPI routes ===
 
 @app.post("/")
 async def webhook(request: Request):
@@ -92,6 +124,10 @@ async def webhook(request: Request):
     print("📥 Payload:", body)
     capture_and_send()
     return JSONResponse(content={"message": "OK"}, status_code=200)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.get("/test")
 async def test():
@@ -103,10 +139,6 @@ async def test():
             "CLOUDINARY_CLOUD_NAME": CLOUDINARY_CLOUD_NAME or "❌ missing"
         }
     }
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
 
 if __name__ == "__main__":
     import uvicorn
