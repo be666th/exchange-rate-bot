@@ -87,7 +87,7 @@ def capture_and_send():
         TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
     )
     print("✅ LINE push message sent.")
-            return
+
 
         except Exception as e:
             print(f"❌ Error on attempt #{attempt + 1}:")
