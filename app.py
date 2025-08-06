@@ -90,20 +90,6 @@ def capture_and_send():
     print("✅ LINE push message sent.")
 
 
-        except Exception as e:
-            print(f"❌ Error on attempt #{attempt + 1}:")
-            traceback.print_exc()
-
-            if 'driver' in locals():
-                driver.quit()
-
-            if attempt >= retry:
-                print("🛑 All retries failed.")
-                return
-            else:
-                time.sleep(5)
-                attempt += 1
-
 # === FastAPI Routes ===
 
 @app.post("/")
