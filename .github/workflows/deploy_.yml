@@ -1,37 +1,42 @@
-name: Daily Screenshot and Notify
+name: 🚀 Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: '31 1 * * *'  # รันทุกวันเวลา 08:31 (ไทย) = 01:31 UTC
+    - cron: "31 1 * * *"  # 08:31 ไทย (01:31 UTC)
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  run-bot:
     runs-on: ubuntu-latest
 
     steps:
       - name: ⬇️ Checkout code
         uses: actions/checkout@v3
 
-      - name: 🔐 Login to Azure
-        uses: azure/login@v1
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          python-version: "3.10"
 
-      - name: 🐳 Build and push Docker image
-        uses: azure/docker-login@v1
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🚀 Run Screenshot + LINE Notify
+        run: python runner.py
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+
+      - name: 📤 Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
         with:
-          login-server: yourregistry.azurecr.io
-          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
-          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
-
-      - run: |
-          docker build -t yourregistry.azurecr.io/exchange-rate-bot:latest .
-          docker push yourregistry.azurecr.io/exchange-rate-bot:latest
-
-      - name: 🚀 Deploy to Azure Container Apps
-        run: |
-          az containerapp update \
-            --name exchange-rate-bot \
-            --resource-group MyResourceGroup \
-            --image yourregistry.azurecr.io/exchange-rate-bot:latest
+          name: debug-artifacts
+          path: |
+            page_source.html
+            error_debug.png
+            load_fail_*.png
+            table_not_found.png
