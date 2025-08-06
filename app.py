@@ -8,6 +8,11 @@ from linebot import LineBotApi
 from linebot.models import TextSendMessage
 import traceback
 import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 # ✅ Load .env
@@ -51,9 +56,6 @@ def upload_image(file_path, folder="exchange-rate"):
     print(f"✅ Uploaded: {response['secure_url']}")
     return response["secure_url"]
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 def capture_and_send():
     options = Options()
