@@ -1,15 +1,8 @@
-name: 🚀 Screenshot and LINE Notify (Daily)
-
-on:
-  schedule:
-    - cron: "31 1 * * *"  # เวลาไทย 08:31 (UTC+7)
-  workflow_dispatch:
-
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: ⬇️ Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v3
 
       - name: 🐍 Set up Python
@@ -29,7 +22,7 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
 
-      - name: 📤 Upload artifacts
+      - name: 📎 Upload debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -37,5 +30,4 @@ jobs:
           path: |
             page_source.html
             table_not_found.png
-
-
+            fallback.txt
