@@ -1,0 +1,29 @@
+name: 🚀 Deploy to Azure Container App
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 1 * * *' # UTC = 08:30 ICT
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          acrName:    myexchangeacr             # ✅ ต้องตรงกับของจริง
+          azureCredentials: ${{ secrets.AZURE_CREDENTIALS }}
+          containerAppName: exchange-rate-bot
+          resourceGroup: my-first-docker-rg
+          dockerfilePath: ./Dockerfile
+          targetPort: 8000

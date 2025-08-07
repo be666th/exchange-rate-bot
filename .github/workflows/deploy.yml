@@ -1,29 +1,42 @@
-name: 🚀 Deploy to Azure Container App
+name: 🚀 Screenshot and LINE Notify (Daily)
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '30 1 * * *' # UTC = 08:30 ICT
+    - cron: "31 1 * * *"  # เวลาไทย 08:31 (UTC+7)
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: ⬇️ Checkout code
         uses: actions/checkout@v3
 
-      - name: Azure Login
-        uses: azure/login@v1
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          python-version: "3.10"
 
-      - name: Deploy to Azure Container Apps
-        uses: azure/container-apps-deploy-action@v2
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🚀 Run Screenshot + LINE Notify
+        run: python runner.py
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+
+      - name: 📤 Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
         with:
-          acrName:    myexchangeacr             # ✅ ต้องตรงกับของจริง
-          azureCredentials: ${{ secrets.AZURE_CREDENTIALS }}
-          containerAppName: exchange-rate-bot
-          resourceGroup: my-first-docker-rg
-          dockerfilePath: ./Dockerfile
-          targetPort: 8000
+          name: debug-artifacts
+          path: |
+            page_source.html
+            error_debug.png
+            load_fail_*.png
+            table_not_found.png
