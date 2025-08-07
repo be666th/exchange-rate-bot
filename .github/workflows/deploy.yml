@@ -29,15 +29,13 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
 
-      - name: 📤 Upload debug artifacts
+      - name: 📤 Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-artifacts
           path: |
             page_source.html
             table_not_found.png
-            load_fail_*.png
-            error_debug.png
-            bbl_capture.png
+
 
