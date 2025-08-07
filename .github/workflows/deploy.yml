@@ -8,7 +8,6 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-
     steps:
       - name: ⬇️ Checkout code
         uses: actions/checkout@v3
@@ -37,6 +36,8 @@ jobs:
           name: debug-artifacts
           path: |
             page_source.html
-            error_debug.png
-            load_fail_*.png
             table_not_found.png
+            load_fail_*.png
+            error_debug.png
+            bbl_capture.png
+
