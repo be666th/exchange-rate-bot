@@ -25,29 +25,34 @@ if not CLOUDINARY_CLOUD_NAME:
 if missing:
     print(f"❌ Missing required environment variables: {', '.join(missing)}")
     print("🛑 Aborting run.")
-else:
-    print("✅ All required env variables found.")
-    print("🚀 Running capture_and_send() ...\n")
+    # ✅ ยังสร้าง fallback ไว้ให้แน่ใจว่า Artifact Upload ได้
+    with open("fallback.txt", "w", encoding="utf-8") as f:
+        f.write("❌ Missing env vars: " + ", ".join(missing))
+    exit(1)
 
-    def create_fallback_file():
-        try:
-            with open("fallback.txt", "w", encoding="utf-8") as f:
-                f.write("⚠️ No page_source.html or table_not_found.png generated.\n")
-                f.write("This file ensures artifact upload always has something to send.\n")
-            print("✅ fallback.txt created.")
-        except Exception as e:
-            print(f"❌ Failed to create fallback.txt: {e}")
+print("✅ All required env variables found.")
+print("🚀 Running capture_and_send() ...\n")
 
+
+def create_fallback_file(reason: str = "No debug files generated"):
     try:
-        capture_and_send()
+        with open("fallback.txt", "w", encoding="utf-8") as f:
+            f.write(f"⚠️ Fallback created: {reason}\n")
+        print("✅ fallback.txt created.")
     except Exception as e:
-        print(f"❌ Error occurred in capture_and_send(): {e}")
-    finally:
-        # ✅ Ensure fallback file is created if no debug outputs
-        html_exists = os.path.exists("page_source.html")
-        png_exists = os.path.exists("table_not_found.png")
+        print(f"❌ Failed to create fallback.txt: {e}")
 
-        if not html_exists and not png_exists:
-            create_fallback_file()
-        else:
-            print("✅ At least one debug file exists. No fallback needed.")
+
+try:
+    capture_and_send()
+except Exception as e:
+    print(f"❌ Error occurred in capture_and_send(): {e}")
+    create_fallback_file(reason=f"Exception: {e}")
+finally:
+    html_exists = os.path.exists("page_source.html")
+    png_exists = os.path.exists("table_not_found.png")
+
+    if not html_exists and not png_exists:
+        create_fallback_file(reason="Missing both page_source.html and table_not_found.png")
+    else:
+        print("✅ At least one debug file exists. No fallback needed.")
