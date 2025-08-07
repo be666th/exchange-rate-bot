@@ -51,7 +51,6 @@ def upload_image(file_path, folder="exchange-rate"):
     )
     print(f"✅ Uploaded: {response['secure_url']}")
     return response["secure_url"]
-
 def capture_and_send():
     url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
     print("🌐 URL:", url_bbl)
@@ -87,19 +86,22 @@ def capture_and_send():
         driver.quit()
         return
 
-    # ✅ Dump page source
-    with open("page_source.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
-    print("📄 page_source.html saved")
+    # ✅ Dump page source to file
+    try:
+        with open("page_source.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        print("📄 page_source.html saved ✅")
+    except Exception as e:
+        print("❌ Failed to write page_source.html:", e.__class__.__name__, str(e))
 
     # ✅ Wait for visible table
     try:
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate"))
         )
-        print("✅ Table found (fallback selector).")
+        print("✅ Table found (using .table-exchange-rate).")
     except Exception as e:
-        print("❌ Table still not found:", e.__class__.__name__, ":", str(e))
+        print("❌ Table not found:", e.__class__.__name__, ":", str(e))
         driver.save_screenshot("table_not_found.png")
         driver.quit()
         return
@@ -111,7 +113,7 @@ def capture_and_send():
     driver.quit()
     print("✅ Screenshot captured.")
 
-    # ✅ Upload
+    # ✅ Upload to Cloudinary
     image_url = upload_image(bbl_img, folder="exchange-rate")
 
     # ✅ Send to LINE
@@ -119,6 +121,7 @@ def capture_and_send():
     message = f"✅ Exchange Rate ({now}):\n{image_url}"
     line_bot_api.push_message(GROUP_ID, TextSendMessage(text=message))
     print("✅ LINE message sent.")
+
 
 
 
