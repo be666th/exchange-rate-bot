@@ -2,7 +2,7 @@ name: 🚀 Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: "31 1 * * *"  # 08:31 ไทย (01:31 UTC)
+    - cron: "31 1 * * *"  # เวลาไทย 08:31 (UTC+7)
   workflow_dispatch:
 
 jobs:
