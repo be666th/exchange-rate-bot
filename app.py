@@ -6,7 +6,7 @@ from datetime import datetime
 
 import cloudinary
 import cloudinary.uploader
-from PIL import Image  # สำหรับขยาย/บีบอัดรูป
+from PIL import Image
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -16,14 +16,14 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
-from linebot.exceptions import LineBotApiError  # ✅ diag
+from linebot.exceptions import LineBotApiError
 
 # ===== ENV & Clients =====
 load_dotenv()
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")
-CAPTURE_MODE = (os.getenv("CAPTURE_MODE") or "JPY").upper()  # JPY | TABLE
+CAPTURE_MODE = "JPY"  # 🔒 บังคับ JPY ตามฟอร์แมตข้อความใหม่
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -43,7 +43,6 @@ def safe_push_line(text: str) -> bool:
         print("📩 LINE message sent.")
         return True
     except LineBotApiError as e:
-        # ✅ พิมพ์รายละเอียดจาก LINE ชัด ๆ
         print("❌ LineBotApiError status:", getattr(e, "status_code", None))
         err = getattr(e, "error", None)
         if err:
@@ -77,7 +76,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=2880,1620")  # ใหญ่เพื่อความคม
+    opt.add_argument("--window-size=2880,1620")
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -119,7 +118,6 @@ def wait_exchange_table(driver, timeout=45):
                 return table
         except Exception:
             table = None
-    # Fallback: ตารางที่มีคำว่า JPY
     try:
         table = wait.until(
             lambda d: next(
@@ -143,7 +141,6 @@ def find_jpy_row(driver):
 
 # --- image utils ---
 def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
-    """แปลงเป็น JPEG + optimize; ลดคุณภาพอัตโนมัติถ้าไฟล์ > target_mb"""
     dst_path = str(pathlib.Path(src_path).with_suffix(".jpg"))
     try:
         img = Image.open(src_path).convert("RGB")
@@ -161,7 +158,6 @@ def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
     return dst_path
 
 def resize_image(path, scale=1.5) -> str:
-    """ขยายภาพ แล้วส่งต่อเข้า to_jpeg_optimized()"""
     try:
         img = Image.open(path)
         new_size = (int(img.width * scale), int(img.height * scale))
@@ -182,35 +178,30 @@ def capture_and_send():
     page_src = f"page_source_{ts}.html"
 
     driver = None
-    message_lines = []
-    image_url = None
-    debug_links = []
+    jpy_captured = False
+    fullpage_url = None
 
     try:
         driver = new_driver()
         driver.get(URL_BBL)
         dismiss_cookies(driver)
-        driver.execute_script("document.body.style.zoom='110%'")  # ซูมให้ตัวใหญ่ขึ้น
+        driver.execute_script("document.body.style.zoom='110%'")
         time.sleep(0.6)
 
-        # page source (debug เสมอ)
+        # debug: page source (อัปขึ้นแต่ไม่ส่งลิงก์ใน LINE)
         try:
             with open(page_src, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
-            link_src = upload_debug(page_src)
-            if link_src:
-                debug_links.append(f"Page source: {link_src}")
+            _ = upload_debug(page_src)
         except Exception as e:
             print("⚠️ save/upload page_source failed:", e)
 
         table_el = wait_exchange_table(driver, timeout=45)
 
-        # fullpage debug
+        # fullpage debug (อัปขึ้น Cloudinary แล้วใช้ในข้อความ)
         try:
             driver.save_screenshot(full_png)
-            link_full = upload_debug(full_png)
-            if link_full:
-                debug_links.append(f"Fullpage: {link_full}")
+            fullpage_url = upload_debug(full_png)
         except Exception:
             pass
 
@@ -218,48 +209,26 @@ def capture_and_send():
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
             time.sleep(0.25)
 
-            captured = False
-            if CAPTURE_MODE == "JPY":
-                jpy_row = find_jpy_row(driver)
-                if jpy_row:
-                    try:
-                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
-                        time.sleep(0.2)
-                        jpy_row.screenshot(table_png)
-                        captured = True
-                        message_lines.append("✅ Exchange Rate: JPY row captured")
-                    except Exception:
-                        captured = False
-
-            if not captured:  # TABLE หรือ JPY ไม่สำเร็จ → ตารางทั้งก้อน
+            jpy_row = find_jpy_row(driver)
+            if jpy_row:
                 try:
-                    table_el.screenshot(table_png)
-                    captured = True
-                    if CAPTURE_MODE == "JPY":
-                        message_lines.append("⚠️ ไม่พบแถว JPY → ส่งรูปทั้งตารางแทน")
-                    else:
-                        message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
+                    time.sleep(0.2)
+                    jpy_row.screenshot(table_png)  # เราไม่ส่งลิงก์ภาพนี้ใน LINE ตามฟอร์แมตใหม่
+                    _ = resize_image(table_png, scale=1.5)  # ยังทำเพื่อความชัด แต่ไม่ต้องอัปลิงก์
+                    jpy_captured = True
                 except Exception:
-                    captured = False
-
-            if not captured:
-                # Fallback สุดท้าย: full page
-                driver.save_screenshot(table_png)
-                message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
-
-            final_img = resize_image(table_png, scale=1.5)
-            image_url = upload_cloudinary(final_img, folder="exchange-rate")
+                    jpy_captured = False
+            else:
+                # ไม่เจอ JPY ก็ถือว่าไม่ captured
+                jpy_captured = False
 
         else:
-            driver.save_screenshot(table_png)
-            final_img = resize_image(table_png, scale=1.5)
-            image_url = upload_cloudinary(final_img, folder="exchange-rate")
-            message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
+            jpy_captured = False
 
     except Exception as e:
         print("🛑 capture_and_send error:", repr(e))
         traceback.print_exc()
-        message_lines.append("🛑 เกิดข้อผิดพลาดระหว่างจับภาพ/ส่งภาพ")
     finally:
         if driver:
             try:
@@ -267,16 +236,16 @@ def capture_and_send():
             except Exception:
                 pass
 
+    # ==== compose message (ตามฟอร์แมตที่ต้องการ) ====
     now_th = datetime.now().strftime("%Y-%m-%d %H:%M")
-    msg = [f"Exchange Rate ({now_th}) [mode={CAPTURE_MODE}]"]
-    msg.extend(message_lines)
-    if image_url:
-        msg.append(image_url)
-    if debug_links:
-        msg.append("🔎 Debug:")
-        msg.extend(debug_links)
+    lines = [
+        f"Exchange Rate ({now_th}) JPY",
+        "✅ Exchange Rate: JPY captured" if jpy_captured else "⚠️ Exchange Rate: JPY not found (fallback)",
+    ]
+    if fullpage_url:
+        lines.append(f"Fullpage: {fullpage_url}")
 
-    safe_push_line("\n".join(msg))
+    safe_push_line("\n".join(lines))
 
 # ===== FastAPI routes =====
 @app.post("/")
@@ -298,7 +267,7 @@ async def test_capture():
     capture_and_send()
     return {"status": "triggered"}
 
-# ✅ Diagnostics
+# Diagnostics (คงไว้ใช้เวลามีปัญหา)
 @app.get("/line-test")
 async def line_test():
     ok = safe_push_line("🔔 LINE connectivity test from Exchange Rate Bot")
