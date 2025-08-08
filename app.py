@@ -1,13 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-import os, time, traceback
+import os, time, traceback, pathlib
 from datetime import datetime
-import pathlib
 
 import cloudinary
 import cloudinary.uploader
-from PIL import Image  # ✅ สำหรับแปลง/บีบอัดรูป
+from PIL import Image  # สำหรับขยาย/บีบอัดรูป
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -23,6 +22,7 @@ load_dotenv()
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")
+CAPTURE_MODE = (os.getenv("CAPTURE_MODE") or "JPY").upper()  # JPY | TABLE
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -63,7 +63,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=2880,1620")  # ✅ ใหญ่ขึ้นเพื่อความคม
+    opt.add_argument("--window-size=2880,1620")  # ใหญ่ขึ้นเพื่อความคม
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -105,6 +105,7 @@ def wait_exchange_table(driver, timeout=45):
                 return table
         except Exception:
             table = None
+    # Fallback: ตารางที่มีคำว่า JPY
     try:
         table = wait.until(
             lambda d: next(
@@ -116,11 +117,20 @@ def wait_exchange_table(driver, timeout=45):
         table = None
     return table
 
+def find_jpy_row(driver):
+    try:
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        for r in rows:
+            if "JPY" in (r.text or "").upper():
+                return r
+        return driver.find_element(By.XPATH, "//table//tr[td[contains(translate(., 'jpy','JPY'),'JPY')]]")
+    except Exception:
+        return None
+
 # --- image utils ---
 def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
     """
-    เปิดไฟล์ src_path (PNG/JPG) -> แปลงเป็น JPEG + optimize, ลดคุณภาพลงอัตโนมัติถ้าไฟล์ใหญ่เกิน target_mb
-    Return: path ใหม่ (นามสกุล .jpg)
+    แปลงเป็น JPEG + optimize; ลดคุณภาพอัตโนมัติถ้าไฟล์ > target_mb
     """
     dst_path = str(pathlib.Path(src_path).with_suffix(".jpg"))
     try:
@@ -132,10 +142,9 @@ def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
             print(f"🗜️ JPEG saved quality={quality}, size={size_mb:.2f} MB")
             if size_mb <= target_mb or quality <= min_quality:
                 break
-            quality -= 5  # ลดทีละ 5 จนกว่าจะต่ำกว่า target หรือถึง min_quality
+            quality -= 5
     except Exception as e:
         print(f"⚠️ JPEG optimize failed: {e}")
-        # ถ้าแปลงไม่สำเร็จ ให้ใช้ไฟล์เดิม
         return src_path
     return dst_path
 
@@ -146,7 +155,7 @@ def resize_image(path, scale=1.5) -> str:
         new_size = (int(img.width * scale), int(img.height * scale))
         img = img.resize(new_size, Image.LANCZOS)
         tmp_path = str(pathlib.Path(path).with_name(pathlib.Path(path).stem + "_scaled.png"))
-        img.save(tmp_path)  # เซฟชั่วคราวเป็น PNG ก่อน
+        img.save(tmp_path)
         print(f"🖼️ Image resized to {new_size}")
         return to_jpeg_optimized(tmp_path)
     except Exception as e:
@@ -169,10 +178,10 @@ def capture_and_send():
         driver = new_driver()
         driver.get(URL_BBL)
         dismiss_cookies(driver)
-        driver.execute_script("document.body.style.zoom='110%'")  # ✅ ซูมให้ตัวใหญ่ขึ้น
+        driver.execute_script("document.body.style.zoom='110%'")  # ซูมให้ตัวใหญ่ขึ้น
         time.sleep(0.6)
 
-        # save page source
+        # page source (debug เสมอ)
         try:
             with open(page_src, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
@@ -182,7 +191,6 @@ def capture_and_send():
         except Exception as e:
             print("⚠️ save/upload page_source failed:", e)
 
-        # find table
         table_el = wait_exchange_table(driver, timeout=45)
 
         # fullpage debug
@@ -196,19 +204,44 @@ def capture_and_send():
 
         if table_el:
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
-            time.sleep(0.3)
-            try:
-                table_el.screenshot(table_png)
-            except Exception:
+            time.sleep(0.25)
+
+            captured = False
+            if CAPTURE_MODE == "JPY":
+                jpy_row = find_jpy_row(driver)
+                if jpy_row:
+                    try:
+                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
+                        time.sleep(0.2)
+                        jpy_row.screenshot(table_png)
+                        captured = True
+                        message_lines.append("✅ Exchange Rate: JPY row captured")
+                    except Exception:
+                        captured = False
+
+            if not captured:  # TABLE หรือ JPY ไม่สำเร็จ → ตารางทั้งก้อน
+                try:
+                    table_el.screenshot(table_png)
+                    captured = True
+                    if CAPTURE_MODE == "JPY":
+                        message_lines.append("⚠️ ไม่พบแถว JPY → ส่งรูปทั้งตารางแทน")
+                    else:
+                        message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
+                except Exception:
+                    captured = False
+
+            if not captured:
+                # Fallback สุดท้าย: full page
                 driver.save_screenshot(table_png)
-            # ✅ ขยาย + แปลงเป็น JPEG ที่บีบอัดเหมาะกับ LINE
-            table_jpg = resize_image(table_png, scale=1.5)
-            image_url = upload_cloudinary(table_jpg, folder="exchange-rate")
-            message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
+                message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
+
+            final_img = resize_image(table_png, scale=1.5)
+            image_url = upload_cloudinary(final_img, folder="exchange-rate")
+
         else:
             driver.save_screenshot(table_png)
-            table_jpg = resize_image(table_png, scale=1.5)
-            image_url = upload_cloudinary(table_jpg, folder="exchange-rate")
+            final_img = resize_image(table_png, scale=1.5)
+            image_url = upload_cloudinary(final_img, folder="exchange-rate")
             message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
 
     except Exception as e:
@@ -223,7 +256,7 @@ def capture_and_send():
                 pass
 
     now_th = datetime.now().strftime("%Y-%m-%d %H:%M")
-    msg = [f"Exchange Rate ({now_th})"]
+    msg = [f"Exchange Rate ({now_th}) [mode={CAPTURE_MODE}]"]
     msg.extend(message_lines)
     if image_url:
         msg.append(image_url)
