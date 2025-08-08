@@ -6,6 +6,7 @@ from datetime import datetime
 
 import cloudinary
 import cloudinary.uploader
+from PIL import Image  # ✅ สำหรับขยายภาพ
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -61,7 +62,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=2560,1440")   # ใหญ่ขึ้นเพื่อความคม
+    opt.add_argument("--window-size=2880,1620")  # ✅ ใหญ่ขึ้น
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -85,29 +86,6 @@ def dismiss_cookies(driver):
         except Exception:
             pass
 
-def click_personal_tab(driver):
-    # บังคับอยู่แท็บ "ลูกค้าบุคคล"
-    try:
-        # ลองเช็คถ้าเลือกอยู่แล้วก็ข้าม
-        selected = driver.find_elements(By.CSS_SELECTOR, "button[role='tab'][aria-selected='true']")
-        if selected and ("บุคคล" in selected[0].text or "Personal" in selected[0].text):
-            return
-    except Exception:
-        pass
-    for sel in [
-        "button[role='tab'][aria-controls*='personal']",
-        "a[data-bs-target*='personal']",
-        "//button[contains(., 'ลูกค้าบุคคล') or contains(., 'Personal')]",
-    ]:
-        try:
-            el = driver.find_element(By.CSS_SELECTOR, sel) if not sel.startswith("//") \
-                 else driver.find_element(By.XPATH, sel)
-            el.click()
-            time.sleep(0.3)
-            return
-        except Exception:
-            continue
-
 def wait_exchange_table(driver, timeout=45):
     wait = WebDriverWait(driver, timeout)
     candidates = [
@@ -119,7 +97,6 @@ def wait_exchange_table(driver, timeout=45):
     for css in candidates:
         try:
             table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css)))
-            # ensure it has rows
             rows_ok = WebDriverWait(driver, 10).until(
                 lambda d: len(table.find_elements(By.CSS_SELECTOR, "tbody tr")) > 0
             )
@@ -127,7 +104,6 @@ def wait_exchange_table(driver, timeout=45):
                 return table
         except Exception:
             table = None
-    # last resort: any table containing JPY in its text
     try:
         table = wait.until(
             lambda d: next(
@@ -139,19 +115,15 @@ def wait_exchange_table(driver, timeout=45):
         table = None
     return table
 
-def find_jpy_row(driver):
+def resize_image(path, scale=1.5):
     try:
-        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-        for r in rows:
-            if "JPY" in (r.text or "").upper():
-                return r
-        # Fallback XPath
-        try:
-            return driver.find_element(By.XPATH, "//table//tr[td[contains(translate(., 'jpy','JPY'),'JPY')]]")
-        except Exception:
-            return None
-    except Exception:
-        return None
+        img = Image.open(path)
+        new_size = (int(img.width * scale), int(img.height * scale))
+        img = img.resize(new_size, Image.LANCZOS)
+        img.save(path)
+        print(f"🖼️ Image resized to {new_size}")
+    except Exception as e:
+        print(f"⚠️ Failed to resize image {path}: {e}")
 
 # -------- main flow --------
 def capture_and_send():
@@ -166,15 +138,13 @@ def capture_and_send():
     debug_links = []
 
     try:
-        # open page
         driver = new_driver()
         driver.get(URL_BBL)
         dismiss_cookies(driver)
-        click_personal_tab(driver)
-        driver.execute_script("document.body.style.zoom='95%'")
+        driver.execute_script("document.body.style.zoom='110%'")  # ✅ ซูมให้ตัวใหญ่ขึ้น
         time.sleep(0.6)
 
-        # save page source (for debug regardless of success)
+        # save page source
         try:
             with open(page_src, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
@@ -184,10 +154,10 @@ def capture_and_send():
         except Exception as e:
             print("⚠️ save/upload page_source failed:", e)
 
-        # try to find table
+        # find table
         table_el = wait_exchange_table(driver, timeout=45)
 
-        # fullpage always for backup
+        # fullpage debug
         try:
             driver.save_screenshot(full_png)
             link_full = upload_debug(full_png)
@@ -196,40 +166,19 @@ def capture_and_send():
         except Exception:
             pass
 
-        # ===== priority: JPY row =====
-        jpy_row = None
         if table_el:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
+            time.sleep(0.3)
             try:
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
-                time.sleep(0.2)
-                jpy_row = find_jpy_row(driver)
-            except Exception:
-                jpy_row = None
-
-        if jpy_row is not None:
-            try:
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
-                time.sleep(0.2)
-                jpy_row.screenshot(table_png)
-                image_url = upload_cloudinary(table_png, folder="exchange-rate")
-                message_lines.append("✅ Exchange Rate: JPY row captured")
-            except Exception:
-                jpy_row = None  # let it fall back below
-
-        if jpy_row is None and table_el:
-            try:
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
-                time.sleep(0.2)
                 table_el.screenshot(table_png)
-                image_url = upload_cloudinary(table_png, folder="exchange-rate")
-                message_lines.append("⚠️ ไม่พบแถว JPY → ส่งรูปทั้งตารางแทน")
             except Exception:
-                table_el = None
-
-        if jpy_row is None and table_el is None:
-            driver.execute_script("document.body.style.zoom='80%'")
-            time.sleep(0.2)
+                driver.save_screenshot(table_png)
+            resize_image(table_png, scale=1.5)  # ✅ ขยายภาพ
+            image_url = upload_cloudinary(table_png, folder="exchange-rate")
+            message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
+        else:
             driver.save_screenshot(table_png)
+            resize_image(table_png, scale=1.5)  # ✅ ขยายภาพ
             image_url = upload_cloudinary(table_png, folder="exchange-rate")
             message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
 
@@ -244,7 +193,6 @@ def capture_and_send():
             except Exception:
                 pass
 
-    # compose single message
     now_th = datetime.now().strftime("%Y-%m-%d %H:%M")
     msg = [f"Exchange Rate ({now_th})"]
     msg.extend(message_lines)
