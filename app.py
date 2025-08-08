@@ -16,6 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
+from linebot.exceptions import LineBotApiError  # ✅ diag
 
 # ===== ENV & Clients =====
 load_dotenv()
@@ -36,13 +37,26 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
 
 # -------- helpers --------
-def safe_push_line(text: str):
+def safe_push_line(text: str) -> bool:
     try:
         line_bot_api.push_message(GROUP_ID, TextSendMessage(text=text))
         print("📩 LINE message sent.")
+        return True
+    except LineBotApiError as e:
+        # ✅ พิมพ์รายละเอียดจาก LINE ชัด ๆ
+        print("❌ LineBotApiError status:", getattr(e, "status_code", None))
+        err = getattr(e, "error", None)
+        if err:
+            print("   message:", getattr(err, "message", None))
+            if hasattr(err, "details"):
+                for d in err.details:
+                    print(f"   - {d.property}: {d.message}")
+        else:
+            print("   raw exception:", repr(e))
+        return False
     except Exception as e:
-        print("❌ LINE push failed:", repr(e))
-        traceback.print_exc()
+        print("❌ LINE push failed (generic):", repr(e))
+        return False
 
 def upload_cloudinary(path: str, folder="exchange-rate") -> str:
     resp = cloudinary.uploader.upload(
@@ -63,7 +77,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=2880,1620")  # ใหญ่ขึ้นเพื่อความคม
+    opt.add_argument("--window-size=2880,1620")  # ใหญ่เพื่อความคม
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -129,9 +143,7 @@ def find_jpy_row(driver):
 
 # --- image utils ---
 def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
-    """
-    แปลงเป็น JPEG + optimize; ลดคุณภาพอัตโนมัติถ้าไฟล์ > target_mb
-    """
+    """แปลงเป็น JPEG + optimize; ลดคุณภาพอัตโนมัติถ้าไฟล์ > target_mb"""
     dst_path = str(pathlib.Path(src_path).with_suffix(".jpg"))
     try:
         img = Image.open(src_path).convert("RGB")
@@ -285,3 +297,17 @@ async def health():
 async def test_capture():
     capture_and_send()
     return {"status": "triggered"}
+
+# ✅ Diagnostics
+@app.get("/line-test")
+async def line_test():
+    ok = safe_push_line("🔔 LINE connectivity test from Exchange Rate Bot")
+    return {"ok": ok}
+
+@app.get("/env-check")
+async def env_check():
+    return {
+        "LINE_TOKEN": bool(os.getenv("LINE_CHANNEL_ACCESS_TOKEN")),
+        "GROUP_ID_prefix": (os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID") or "")[:3],
+        "CAPTURE_MODE": CAPTURE_MODE,
+    }
