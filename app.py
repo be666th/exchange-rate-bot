@@ -11,8 +11,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
 from datetime import datetime
+import time
+import traceback
 
 # ✅ Load env
 load_dotenv()
@@ -40,89 +41,135 @@ cloudinary.config(
     api_secret=CLOUDINARY_API_SECRET
 )
 
-def upload_image(file_path, folder="exchange-rate"):
-    print("📤 Uploading image to Cloudinary...")
-    response = cloudinary.uploader.upload(
-        file_path,
-        folder=folder,
-        use_filename=True,
-        unique_filename=False,
-        overwrite=True
-    )
-    print(f"✅ Uploaded: {response['secure_url']}")
-    return response["secure_url"]
-def capture_and_send():
-    url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
-    print("🌐 URL:", url_bbl)
+URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+TABLE_SELECTOR = "table.table-exchange-rate"  # ปรับได้หากธนาคารเปลี่ยนโครงสร้างหน้า
 
+
+def safe_push_line(text: str):
+    try:
+        line_bot_api.push_message(GROUP_ID, TextSendMessage(text=text))
+        print("📩 Sent LINE text message.")
+    except Exception as e:
+        print("❌ Failed to send LINE message:", repr(e))
+        traceback.print_exc()
+
+
+def upload_image(file_path, folder="exchange-rate") -> str:
+    print("📤 Uploading image to Cloudinary...")
+    try:
+        response = cloudinary.uploader.upload(
+            file_path,
+            folder=folder,
+            use_filename=True,
+            unique_filename=False,
+            overwrite=True
+        )
+        url = response["secure_url"]
+        print(f"✅ Uploaded: {url}")
+        return url
+    except Exception as e:
+        print("❌ Cloudinary upload failed:", repr(e))
+        traceback.print_exc()
+        raise
+
+
+def _new_driver() -> webdriver.Chrome:
     options = Options()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
-
     driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(60)
+    return driver
 
-    # ✅ Retry loading page
-    success = False
-    for attempt in range(3):
+
+def capture_and_send():
+    driver = None
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    raw_fullpage_name = f"bbl_fullpage_{ts}.png"
+    table_img_name = f"bbl_exchange_{ts}.png"
+
+    try:
+        driver = _new_driver()
+
+        # ✅ Retry loading page (3 ครั้ง)
+        success = False
+        for attempt in range(1, 4):
+            try:
+                print(f"🌐 Loading page (attempt {attempt}) → {URL_BBL}")
+                driver.get(URL_BBL)
+                success = True
+                print("✅ Page loaded.")
+                break
+            except Exception as e:
+                print(f"❌ Load failed (attempt {attempt}):", repr(e))
+                time.sleep(3)
+
+        if not success:
+            driver.save_screenshot(f"load_fail_{ts}.png")
+            safe_push_line("🛑 BBL page load failed after 3 retries.")
+            return
+
+        # ✅ บันทึก page_source ไว้ debug
         try:
-            print(f"🔁 Attempt #{attempt+1} loading page...")
-            driver.set_page_load_timeout(60)
-            driver.get(url_bbl)
-            print("✅ Page loaded.")
-            success = True
-            break
+            with open(f"page_source_{ts}.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            print("📄 page_source saved.")
         except Exception as e:
-            print(f"❌ Attempt #{attempt+1} failed:", e.__class__.__name__, ":", str(e))
-            driver.save_screenshot(f"load_fail_{attempt+1}.png")
-            time.sleep(3)
+            print("⚠️ Could not write page_source:", repr(e))
 
-    if not success:
-        print("🛑 Failed to load page after retries")
-        driver.quit()
-        return
+        # ✅ รอให้ตารางโหลดและมองเห็นได้
+        wait = WebDriverWait(driver, 35)
+        table_el = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, TABLE_SELECTOR)))
+        print("✅ Exchange table is visible.")
 
-    # ✅ Dump page source to file
-    try:
-        with open("page_source.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        print("📄 page_source.html saved ✅")
+        # เลื่อนให้ตารางอยู่กลางหน้าจอ + ปรับ zoom เล็กน้อย
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
+            driver.execute_script("document.body.style.zoom='80%'")
+            time.sleep(0.5)
+        except Exception as e:
+            print("⚠️ Scroll/zoom script failed:", repr(e))
+
+        # ✅ แคปเต็มหน้า (เก็บไว้ debug)
+        try:
+            driver.save_screenshot(raw_fullpage_name)
+            print(f"🖼️ Saved fullpage screenshot → {raw_fullpage_name}")
+        except Exception as e:
+            print("⚠️ Fullpage screenshot failed:", repr(e))
+
+        # ✅ แคป “เฉพาะตาราง” อ่านง่าย
+        try:
+            table_el.screenshot(table_img_name)
+            print(f"🖼️ Saved table screenshot → {table_img_name}")
+        except Exception as e:
+            print("❌ Element screenshot failed:", repr(e))
+            # fallback: เซฟทั้งหน้าแทน
+            driver.save_screenshot(table_img_name)
+            print("↩️ Fallback to fullpage screenshot for table image.")
+
+        # ✅ อัปโหลด Cloudinary
+        image_url = upload_image(table_img_name, folder="exchange-rate")
+
+        # ✅ ส่ง LINE พร้อมเวลาที่ไทย
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        msg = f"✅ Exchange Rate ({now_str}):\n{image_url}"
+        safe_push_line(msg)
+
     except Exception as e:
-        print("❌ Failed to write page_source.html:", e.__class__.__name__, str(e))
-
-    # ✅ Wait for visible table
-    try:
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate"))
-        )
-        print("✅ Table found (using .table-exchange-rate).")
-    except Exception as e:
-        print("❌ Table not found:", e.__class__.__name__, ":", str(e))
-        driver.save_screenshot("table_not_found.png")
-        driver.quit()
-        return
-
-    # ✅ Screenshot
-    driver.execute_script("document.body.style.zoom='75%'")
-    bbl_img = "bbl_capture.png"
-    driver.save_screenshot(bbl_img)
-    driver.quit()
-    print("✅ Screenshot captured.")
-
-    # ✅ Upload to Cloudinary
-    image_url = upload_image(bbl_img, folder="exchange-rate")
-
-    # ✅ Send to LINE
-    now = datetime.now().strftime('%Y-%m-%d %H:%M')
-    message = f"✅ Exchange Rate ({now}):\n{image_url}"
-    line_bot_api.push_message(GROUP_ID, TextSendMessage(text=message))
-    print("✅ LINE message sent.")
-
-
+        print("🛑 capture_and_send() failed:", repr(e))
+        traceback.print_exc()
+        safe_push_line("🛑 Exchange bot error occurred while capturing or sending image.")
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
 
 # === FastAPI routes ===
@@ -130,8 +177,11 @@ def capture_and_send():
 @app.post("/")
 async def webhook(request: Request):
     print("🔔 Received POST / webhook")
-    body = await request.json()
-    print("📥 Payload:", body)
+    try:
+        body = await request.json()
+        print("📥 Payload:", body)
+    except Exception:
+        print("📥 No/invalid JSON payload.")
     capture_and_send()
     return JSONResponse(content={"message": "OK"}, status_code=200)
 
@@ -139,8 +189,13 @@ async def webhook(request: Request):
 async def health():
     return {"status": "ok"}
 
-@app.get("/test")
-async def test():
+@app.get("/test-capture")
+async def test_capture():
+    capture_and_send()
+    return {"status": "triggered"}
+
+@app.get("/env")
+async def env():
     return {
         "status": "ok",
         "env": {
