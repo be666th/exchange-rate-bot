@@ -3,10 +3,11 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os, time, traceback
 from datetime import datetime
+import pathlib
 
 import cloudinary
 import cloudinary.uploader
-from PIL import Image  # ✅ สำหรับขยายภาพ
+from PIL import Image  # ✅ สำหรับแปลง/บีบอัดรูป
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -62,7 +63,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=2880,1620")  # ✅ ใหญ่ขึ้น
+    opt.add_argument("--window-size=2880,1620")  # ✅ ใหญ่ขึ้นเพื่อความคม
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -115,15 +116,42 @@ def wait_exchange_table(driver, timeout=45):
         table = None
     return table
 
-def resize_image(path, scale=1.5):
+# --- image utils ---
+def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
+    """
+    เปิดไฟล์ src_path (PNG/JPG) -> แปลงเป็น JPEG + optimize, ลดคุณภาพลงอัตโนมัติถ้าไฟล์ใหญ่เกิน target_mb
+    Return: path ใหม่ (นามสกุล .jpg)
+    """
+    dst_path = str(pathlib.Path(src_path).with_suffix(".jpg"))
+    try:
+        img = Image.open(src_path).convert("RGB")
+        quality = 90
+        while True:
+            img.save(dst_path, format="JPEG", optimize=True, quality=quality)
+            size_mb = os.path.getsize(dst_path) / (1024 * 1024)
+            print(f"🗜️ JPEG saved quality={quality}, size={size_mb:.2f} MB")
+            if size_mb <= target_mb or quality <= min_quality:
+                break
+            quality -= 5  # ลดทีละ 5 จนกว่าจะต่ำกว่า target หรือถึง min_quality
+    except Exception as e:
+        print(f"⚠️ JPEG optimize failed: {e}")
+        # ถ้าแปลงไม่สำเร็จ ให้ใช้ไฟล์เดิม
+        return src_path
+    return dst_path
+
+def resize_image(path, scale=1.5) -> str:
+    """ขยายภาพ แล้วส่งต่อเข้า to_jpeg_optimized()"""
     try:
         img = Image.open(path)
         new_size = (int(img.width * scale), int(img.height * scale))
         img = img.resize(new_size, Image.LANCZOS)
-        img.save(path)
+        tmp_path = str(pathlib.Path(path).with_name(pathlib.Path(path).stem + "_scaled.png"))
+        img.save(tmp_path)  # เซฟชั่วคราวเป็น PNG ก่อน
         print(f"🖼️ Image resized to {new_size}")
+        return to_jpeg_optimized(tmp_path)
     except Exception as e:
         print(f"⚠️ Failed to resize image {path}: {e}")
+        return to_jpeg_optimized(path)
 
 # -------- main flow --------
 def capture_and_send():
@@ -173,13 +201,14 @@ def capture_and_send():
                 table_el.screenshot(table_png)
             except Exception:
                 driver.save_screenshot(table_png)
-            resize_image(table_png, scale=1.5)  # ✅ ขยายภาพ
-            image_url = upload_cloudinary(table_png, folder="exchange-rate")
+            # ✅ ขยาย + แปลงเป็น JPEG ที่บีบอัดเหมาะกับ LINE
+            table_jpg = resize_image(table_png, scale=1.5)
+            image_url = upload_cloudinary(table_jpg, folder="exchange-rate")
             message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
         else:
             driver.save_screenshot(table_png)
-            resize_image(table_png, scale=1.5)  # ✅ ขยายภาพ
-            image_url = upload_cloudinary(table_png, folder="exchange-rate")
+            table_jpg = resize_image(table_png, scale=1.5)
+            image_url = upload_cloudinary(table_jpg, folder="exchange-rate")
             message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
 
     except Exception as e:

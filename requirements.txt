@@ -7,4 +7,5 @@ line-bot-sdk
 selenium
 cloudinary
 line-bot-sdk
+pillow
 
