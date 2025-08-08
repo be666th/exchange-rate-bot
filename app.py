@@ -1,25 +1,26 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-import os
-import traceback
+import os, time, traceback
+from datetime import datetime
+
 import cloudinary
 import cloudinary.uploader
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from datetime import datetime
+
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
+# ===== ENV & Clients =====
 load_dotenv()
 
-app = FastAPI()
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-GROUP_ID = os.getenv("GROUP_ID")
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -27,102 +28,185 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
-def upload_image(file_path, folder="exchange-rate"):
-    """Upload image to Cloudinary and return secure URL"""
-    response = cloudinary.uploader.upload(
-        file_path,
-        folder=folder,
-        use_filename=True,
-        unique_filename=False,
-        overwrite=True
-    )
-    print(f"✅ Uploaded to Cloudinary: {response['secure_url']}")
-    return response["secure_url"]
+app = FastAPI()
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
-def upload_debug(file_path):
-    """Upload debug file to Cloudinary under exchange-rate/debug"""
+URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+
+# -------- helpers --------
+def safe_push_line(text: str):
     try:
-        return upload_image(file_path, folder="exchange-rate/debug")
+        line_bot_api.push_message(GROUP_ID, TextSendMessage(text=text))
+        print("📩 LINE message sent.")
     except Exception as e:
-        print(f"❌ Failed to upload debug file {file_path}: {e}")
-        return None
-
-def capture_and_send():
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    bbl_img = f"bbl_capture_{ts}.png"
-    page_src_file = f"page_source_{ts}.html"
-
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-
-    driver = None
-    try:
-        driver = webdriver.Chrome(options=options)
-        url_bbl = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
-        driver.get(url_bbl)
-        driver.implicitly_wait(5)
-        driver.execute_script("document.body.style.zoom='75%'")
-
-        # Save page source for debugging
-        with open(page_src_file, "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-
-        # Try waiting for table to appear
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-exchange-rate"))
-            )
-        except Exception as e:
-            print("⚠️ Could not locate table element:", e)
-
-        driver.save_screenshot(bbl_img)
-        print("✅ Screenshot captured.")
-
-        image_url = upload_image(bbl_img, folder="exchange-rate")
-
-        line_bot_api.push_message(
-            GROUP_ID,
-            TextSendMessage(text=f"✅ Exchange Rate capture uploaded: {image_url}")
-        )
-        print("✅ LINE push message sent.")
-
-    except Exception as e:
-        print("🛑 Error in capture_and_send:", e)
+        print("❌ LINE push failed:", repr(e))
         traceback.print_exc()
 
-        # Save and upload debug files
-        debug_links = []
+def upload_cloudinary(path: str, folder="exchange-rate") -> str:
+    resp = cloudinary.uploader.upload(
+        path, folder=folder, use_filename=True, unique_filename=False, overwrite=True
+    )
+    return resp["secure_url"]
+
+def upload_debug(path: str) -> str | None:
+    try:
+        return upload_cloudinary(path, folder="exchange-rate/debug")
+    except Exception as e:
+        print(f"⚠️ Upload debug failed for {path}: {e}")
+        return None
+
+def new_driver() -> webdriver.Chrome:
+    opt = Options()
+    opt.add_argument("--headless=new")
+    opt.add_argument("--no-sandbox")
+    opt.add_argument("--disable-dev-shm-usage")
+    opt.add_argument("--disable-gpu")
+    opt.add_argument("--window-size=1920,1080")
+    opt.add_argument("--lang=th-TH")
+    opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+    drv = webdriver.Chrome(options=opt)
+    drv.set_page_load_timeout(60)
+    return drv
+
+def dismiss_cookies(driver):
+    for sel in [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label='ยอมรับทั้งหมด']",
+        "button[aria-label='Accept All']",
+        ".ot-sdk-container #onetrust-accept-btn-handler",
+    ]:
         try:
-            if driver:
-                driver.save_screenshot(bbl_img)
-                link_img = upload_debug(bbl_img)
-                if link_img:
-                    debug_links.append(f"Screenshot: {link_img}")
+            btns = driver.find_elements(By.CSS_SELECTOR, sel)
+            if btns:
+                btns[0].click()
+                time.sleep(0.2)
+                break
+        except Exception:
+            pass
 
-            if os.path.exists(page_src_file):
-                link_html = upload_debug(page_src_file)
-                if link_html:
-                    debug_links.append(f"Page source: {link_html}")
+def wait_exchange_table(driver, timeout=45):
+    wait = WebDriverWait(driver, timeout)
+    candidates = [
+        "table.table-exchange-rate",
+        "table[class*='exchange']",
+        "section table",
+    ]
+    table = None
+    for css in candidates:
+        try:
+            table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css)))
+            # ensure it has rows
+            rows_ok = WebDriverWait(driver, 10).until(
+                lambda d: len(table.find_elements(By.CSS_SELECTOR, "tbody tr")) > 0
+            )
+            if rows_ok:
+                return table
+        except Exception:
+            table = None
+    # last resort: any table containing JPY
+    try:
+        table = wait.until(
+            lambda d: next(
+                (t for t in d.find_elements(By.TAG_NAME, "table") if "JPY" in (t.text or "")),
+                None
+            )
+        )
+    except Exception:
+        table = None
+    return table
 
-            if debug_links:
-                debug_msg = "🛑 Capture failed. Debug files:\n" + "\n".join(debug_links)
-                line_bot_api.push_message(GROUP_ID, TextSendMessage(text=debug_msg))
-        except Exception as ex:
-            print("❌ Failed to handle debug upload:", ex)
+# -------- main flow --------
+def capture_and_send():
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    full_png = f"full_{ts}.png"
+    table_png = f"bbl_exchange_{ts}.png"
+    page_src = f"page_source_{ts}.html"
 
+    driver = None
+    message_lines = []
+    image_url = None
+    debug_links = []
+
+    try:
+        # open page
+        driver = new_driver()
+        driver.get(URL_BBL)
+        dismiss_cookies(driver)
+        time.sleep(0.6)
+
+        # save page source (for debug regardless of success)
+        try:
+            with open(page_src, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            link_src = upload_debug(page_src)
+            if link_src:
+                debug_links.append(f"Page source: {link_src}")
+        except Exception as e:
+            print("⚠️ save/upload page_source failed:", e)
+
+        # try to find table
+        table_el = wait_exchange_table(driver, timeout=45)
+
+        # fullpage always for backup
+        try:
+            driver.save_screenshot(full_png)
+            link_full = upload_debug(full_png)
+            if link_full:
+                debug_links.append(f"Fullpage: {link_full}")
+        except Exception:
+            pass
+
+        if table_el:
+            # crop to table
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
+            driver.execute_script("document.body.style.zoom='80%'")
+            time.sleep(0.3)
+            try:
+                table_el.screenshot(table_png)
+            except Exception:
+                # fallback to full page
+                driver.save_screenshot(table_png)
+            image_url = upload_cloudinary(table_png, folder="exchange-rate")
+            message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
+        else:
+            # fallback
+            driver.execute_script("document.body.style.zoom='75%'")
+            time.sleep(0.2)
+            driver.save_screenshot(table_png)
+            image_url = upload_cloudinary(table_png, folder="exchange-rate")
+            message_lines.append("⚠️ หา 'ตารางอัตราแลกเปลี่ยน' ไม่เจอ → ส่งภาพเต็มหน้าแทน")
+
+    except Exception as e:
+        print("🛑 capture_and_send error:", repr(e))
+        traceback.print_exc()
+        message_lines.append("🛑 เกิดข้อผิดพลาดระหว่างจับภาพ/ส่งภาพ")
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
+    # compose single message
+    now_th = datetime.now().strftime("%Y-%m-%d %H:%M")
+    msg = [f"Exchange Rate ({now_th})"]
+    msg.extend(message_lines)
+    if image_url:
+        msg.append(image_url)
+    if debug_links:
+        msg.append("🔎 Debug:")
+        msg.extend(debug_links)
+
+    safe_push_line("\n".join(msg))
+
+# ===== FastAPI routes =====
 @app.post("/")
 async def webhook(request: Request):
     try:
         body = await request.json()
         print("🔔 Received event:", body)
-    except:
+    except Exception:
         pass
     capture_and_send()
     return JSONResponse(content={"message": "OK"}, status_code=200)
@@ -131,6 +215,7 @@ async def webhook(request: Request):
 async def health():
     return {"status": "ok"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+@app.get("/test-capture")
+async def test_capture():
+    capture_and_send()
+    return {"status": "triggered"}
