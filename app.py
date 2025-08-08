@@ -3,10 +3,11 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os, time, traceback, pathlib
 from datetime import datetime
+import pytz  # ✅ ใช้เวลา Asia/Bangkok
 
 import cloudinary
 import cloudinary.uploader
-from PIL import Image
+from PIL import Image  # ✅ ขยาย/บีบอัด JPEG
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -23,7 +24,7 @@ load_dotenv()
 
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")
-CAPTURE_MODE = "JPY"  # 🔒 บังคับ JPY ตามฟอร์แมตข้อความใหม่
+CAPTURE_MODE = "JPY"  # 🔒 บังคับ JPY ตามสเปกข้อความ
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -140,6 +141,8 @@ def find_jpy_row(driver):
         return None
 
 # --- image utils ---
+from PIL import Image
+
 def to_jpeg_optimized(src_path: str, min_quality=75, target_mb=8) -> str:
     dst_path = str(pathlib.Path(src_path).with_suffix(".jpg"))
     try:
@@ -172,6 +175,9 @@ def resize_image(path, scale=1.5) -> str:
 
 # -------- main flow --------
 def capture_and_send():
+    tz_bkk = pytz.timezone("Asia/Bangkok")
+    now_bkk = datetime.now(tz_bkk).strftime("%Y-%m-%d %H:%M")
+
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     full_png = f"full_{ts}.png"
     table_png = f"bbl_exchange_{ts}.png"
@@ -188,7 +194,7 @@ def capture_and_send():
         driver.execute_script("document.body.style.zoom='110%'")
         time.sleep(0.6)
 
-        # debug: page source (อัปขึ้นแต่ไม่ส่งลิงก์ใน LINE)
+        # debug: page source (อัปขึ้นแต่ไม่ใส่ในข้อความ LINE)
         try:
             with open(page_src, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
@@ -196,9 +202,8 @@ def capture_and_send():
         except Exception as e:
             print("⚠️ save/upload page_source failed:", e)
 
+        # หา table + fullpage debug (อันนี้จะใส่ลิงก์ในข้อความ LINE)
         table_el = wait_exchange_table(driver, timeout=45)
-
-        # fullpage debug (อัปขึ้น Cloudinary แล้วใช้ในข้อความ)
         try:
             driver.save_screenshot(full_png)
             fullpage_url = upload_debug(full_png)
@@ -208,21 +213,18 @@ def capture_and_send():
         if table_el:
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
             time.sleep(0.25)
-
             jpy_row = find_jpy_row(driver)
             if jpy_row:
                 try:
                     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
                     time.sleep(0.2)
-                    jpy_row.screenshot(table_png)  # เราไม่ส่งลิงก์ภาพนี้ใน LINE ตามฟอร์แมตใหม่
-                    _ = resize_image(table_png, scale=1.5)  # ยังทำเพื่อความชัด แต่ไม่ต้องอัปลิงก์
+                    jpy_row.screenshot(table_png)
+                    _ = resize_image(table_png, scale=1.5)  # ทำให้ชัด แต่เราไม่ใส่ลิงก์ภาพนี้ใน LINE
                     jpy_captured = True
                 except Exception:
                     jpy_captured = False
             else:
-                # ไม่เจอ JPY ก็ถือว่าไม่ captured
                 jpy_captured = False
-
         else:
             jpy_captured = False
 
@@ -236,10 +238,9 @@ def capture_and_send():
             except Exception:
                 pass
 
-    # ==== compose message (ตามฟอร์แมตที่ต้องการ) ====
-    now_th = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # ==== Compose message (Bangkok local time +7UTC) ====
     lines = [
-        f"Exchange Rate ({now_th}) JPY",
+        f"Exchange Rate ({now_bkk} +7UTC) JPY",
         "✅ Exchange Rate: JPY captured" if jpy_captured else "⚠️ Exchange Rate: JPY not found (fallback)",
     ]
     if fullpage_url:
@@ -279,4 +280,5 @@ async def env_check():
         "LINE_TOKEN": bool(os.getenv("LINE_CHANNEL_ACCESS_TOKEN")),
         "GROUP_ID_prefix": (os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID") or "")[:3],
         "CAPTURE_MODE": CAPTURE_MODE,
+        "TZ": "Asia/Bangkok (+7UTC)"
     }
