@@ -61,7 +61,7 @@ def new_driver() -> webdriver.Chrome:
     opt.add_argument("--no-sandbox")
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
-    opt.add_argument("--window-size=1920,1080")
+    opt.add_argument("--window-size=2560,1440")   # ใหญ่ขึ้นเพื่อความคม
     opt.add_argument("--lang=th-TH")
     opt.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -85,6 +85,29 @@ def dismiss_cookies(driver):
         except Exception:
             pass
 
+def click_personal_tab(driver):
+    # บังคับอยู่แท็บ "ลูกค้าบุคคล"
+    try:
+        # ลองเช็คถ้าเลือกอยู่แล้วก็ข้าม
+        selected = driver.find_elements(By.CSS_SELECTOR, "button[role='tab'][aria-selected='true']")
+        if selected and ("บุคคล" in selected[0].text or "Personal" in selected[0].text):
+            return
+    except Exception:
+        pass
+    for sel in [
+        "button[role='tab'][aria-controls*='personal']",
+        "a[data-bs-target*='personal']",
+        "//button[contains(., 'ลูกค้าบุคคล') or contains(., 'Personal')]",
+    ]:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel) if not sel.startswith("//") \
+                 else driver.find_element(By.XPATH, sel)
+            el.click()
+            time.sleep(0.3)
+            return
+        except Exception:
+            continue
+
 def wait_exchange_table(driver, timeout=45):
     wait = WebDriverWait(driver, timeout)
     candidates = [
@@ -104,7 +127,7 @@ def wait_exchange_table(driver, timeout=45):
                 return table
         except Exception:
             table = None
-    # last resort: any table containing JPY
+    # last resort: any table containing JPY in its text
     try:
         table = wait.until(
             lambda d: next(
@@ -115,6 +138,20 @@ def wait_exchange_table(driver, timeout=45):
     except Exception:
         table = None
     return table
+
+def find_jpy_row(driver):
+    try:
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        for r in rows:
+            if "JPY" in (r.text or "").upper():
+                return r
+        # Fallback XPath
+        try:
+            return driver.find_element(By.XPATH, "//table//tr[td[contains(translate(., 'jpy','JPY'),'JPY')]]")
+        except Exception:
+            return None
+    except Exception:
+        return None
 
 # -------- main flow --------
 def capture_and_send():
@@ -133,6 +170,8 @@ def capture_and_send():
         driver = new_driver()
         driver.get(URL_BBL)
         dismiss_cookies(driver)
+        click_personal_tab(driver)
+        driver.execute_script("document.body.style.zoom='95%'")
         time.sleep(0.6)
 
         # save page source (for debug regardless of success)
@@ -157,25 +196,42 @@ def capture_and_send():
         except Exception:
             pass
 
+        # ===== priority: JPY row =====
+        jpy_row = None
         if table_el:
-            # crop to table
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
-            driver.execute_script("document.body.style.zoom='80%'")
-            time.sleep(0.3)
             try:
-                table_el.screenshot(table_png)
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
+                time.sleep(0.2)
+                jpy_row = find_jpy_row(driver)
             except Exception:
-                # fallback to full page
-                driver.save_screenshot(table_png)
-            image_url = upload_cloudinary(table_png, folder="exchange-rate")
-            message_lines.append("✅ Exchange Rate: จับตารางสำเร็จ")
-        else:
-            # fallback
-            driver.execute_script("document.body.style.zoom='75%'")
+                jpy_row = None
+
+        if jpy_row is not None:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
+                time.sleep(0.2)
+                jpy_row.screenshot(table_png)
+                image_url = upload_cloudinary(table_png, folder="exchange-rate")
+                message_lines.append("✅ Exchange Rate: JPY row captured")
+            except Exception:
+                jpy_row = None  # let it fall back below
+
+        if jpy_row is None and table_el:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", table_el)
+                time.sleep(0.2)
+                table_el.screenshot(table_png)
+                image_url = upload_cloudinary(table_png, folder="exchange-rate")
+                message_lines.append("⚠️ ไม่พบแถว JPY → ส่งรูปทั้งตารางแทน")
+            except Exception:
+                table_el = None
+
+        if jpy_row is None and table_el is None:
+            driver.execute_script("document.body.style.zoom='80%'")
             time.sleep(0.2)
             driver.save_screenshot(table_png)
             image_url = upload_cloudinary(table_png, folder="exchange-rate")
-            message_lines.append("⚠️ หา 'ตารางอัตราแลกเปลี่ยน' ไม่เจอ → ส่งภาพเต็มหน้าแทน")
+            message_lines.append("⚠️ ไม่พบตาราง → ส่งภาพเต็มหน้าแทน")
 
     except Exception as e:
         print("🛑 capture_and_send error:", repr(e))
