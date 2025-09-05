@@ -1,36 +1,39 @@
 name: Deploy Exchange Rate Bot
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
   schedule:
-    - cron: '31 1 * * 1-5'  # Run at 08:31 ICT (01:31 UTC) Mon–Fri
+    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok
+    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok
+    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Print time
-      run: |
-        echo "⏰ UTC time:" && date -u
-        echo "⏰ Thailand time (ICT):" && TZ='Asia/Bangkok' date
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Docker login
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.AZURE_REGISTRY_SERVER }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
 
-    - name: Build & Push to Azure Container Registry
-      run: |
-        az acr build --registry ${{ secrets.AZURE_ACR_NAME }} --image exchange-rate-bot:latest .
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest .
+          docker push ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
 
-    - name: Deploy to Azure Container App
-      run: |
-        az containerapp update \
-          --name ${{ secrets.AZURE_APP_NAME }} \
-          --resource-group ${{ secrets.AZURE_RG }} \
-          --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/exchange-rate-bot:latest
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name exchange-rate-bot \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
