@@ -4,43 +4,71 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
-    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok
-    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok
+    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok (UTC+7)
+    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok (UTC+7)
 
+# ป้องกันทับกันหากมีหลายทริกเกอร์ใกล้กัน
 concurrency:
   group: exchange-rate-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read         # สำหรับ checkout โค้ด
+  id-token: write        # เผื่อใช้กับ Azure OIDC (ถ้าใช้ AZURE_CREDENTIALS ก็ไม่บังคับ)
+
+env:
+  TZ: Asia/Bangkok
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    env:
-      TZ: Asia/Bangkok
+    timeout-minutes: 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # TODO: ใส่สเต็ป deploy ตามที่คุณใช้อยู่จริง (เหมือนเวอร์ชันเดิมของ repo)
-      # - name: Log in to Azure
-      #   uses: azure/login@v1
-      #   with:
-      #     creds: ${{ secrets.AZURE_CREDENTIALS }}
-      #
-      # - name: Docker login
-      #   uses: azure/docker-login@v1
-      #   with:
-      #     login-server: ${{ secrets.AZURE_REGISTRY_SERVER }}
-      #     username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
-      #     password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
-      #
-      # - name: Build & Push image
-      #   run: |
-      #     docker build -t ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest .
-      #     docker push ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
-      #
-      # - name: Deploy to Azure Container Apps
-      #   run: |
-      #     az containerapp update \
-      #       --name exchange-rate-bot \
-      #       --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-      #       --image ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
+      # ----- Login Azure (ใช้ Service Principal JSON เก็บไว้ใน AZURE_CREDENTIALS) -----
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ----- Login Docker Registry (ACR) -----
+      - name: Docker login (ACR)
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.AZURE_REGISTRY_SERVER }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+
+      # ----- Build & Push Image -----
+      - name: Build & Push Docker image
+        run: |
+          IMAGE="${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest"
+          echo "Building $IMAGE"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      # ----- Deploy to Azure Container Apps -----
+      - name: Deploy to Azure Container Apps
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az extension add --name containerapp --upgrade -y
+            IMAGE="${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest"
+            echo "Updating Container App to image: $IMAGE"
+            az containerapp update \
+              --name "${{ secrets.AZURE_CONTAINERAPP_NAME }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --image "$IMAGE"
+
+      # (ออปชัน) ตรวจสุขภาพหลัง deploy
+      - name: Show Container App revision
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az containerapp revision list \
+              --name "${{ secrets.AZURE_CONTAINERAPP_NAME }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --query "[0].{name:name,createdTime:createdTime,active:active}" -o table
