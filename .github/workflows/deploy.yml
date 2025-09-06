@@ -1,41 +1,46 @@
-name: 📸 Screenshot and LINE Notify (Daily)
+name: Deploy Exchange Rate Bot
 
 on:
-  schedule:
-    - cron: "31 1 * * *"  # เวลาไทย 08:31 (UTC+7)
   workflow_dispatch:
+  schedule:
+    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
+    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok
+    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok
+
+concurrency:
+  group: exchange-rate-deploy
+  cancel-in-progress: false
 
 jobs:
-  run-bot:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
+    env:
+      TZ: Asia/Bangkok
     steps:
-      - name: 🔽 Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
-      - name: 📦 Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: 🚀 Run Screenshot + LINE Notify
-        run: python runner.py
-        env:
-          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-
-      - name: 📤 Upload debug artifacts
-        if: always()  # ← รันทุกครั้งไม่ว่า runner.py จะ success หรือ fail
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-artifacts
-          path: |
-            page_source.html
-            table_not_found.png
-          if-no-files-found: ignore
+      # TODO: ใส่สเต็ป deploy ตามที่คุณใช้อยู่จริง (เหมือนเวอร์ชันเดิมของ repo)
+      # - name: Log in to Azure
+      #   uses: azure/login@v1
+      #   with:
+      #     creds: ${{ secrets.AZURE_CREDENTIALS }}
+      #
+      # - name: Docker login
+      #   uses: azure/docker-login@v1
+      #   with:
+      #     login-server: ${{ secrets.AZURE_REGISTRY_SERVER }}
+      #     username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+      #     password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+      #
+      # - name: Build & Push image
+      #   run: |
+      #     docker build -t ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest .
+      #     docker push ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
+      #
+      # - name: Deploy to Azure Container Apps
+      #   run: |
+      #     az containerapp update \
+      #       --name exchange-rate-bot \
+      #       --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+      #       --image ${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest
