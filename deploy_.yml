@@ -3,9 +3,19 @@ name: Deploy Exchange Rate Bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok
+    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
     - cron: "0 5 * * *"    # 12:00 Asia/Bangkok
     - cron: "0 8 * * *"    # 15:00 Asia/Bangkok
+concurrency:
+  group: exchange-rate-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Bangkok
+
 
 jobs:
   build-and-deploy:
