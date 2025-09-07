@@ -1,0 +1,43 @@
+name: Screenshot and LINE Notify (Daily)
+
+on:
+  schedule:
+    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
+    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok (UTC+7)
+    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok (UTC+7)
+  workflow_dispatch:
+
+concurrency:
+  group: screenshot-line-notify
+  cancel-in-progress: true
+
+env:
+  TZ: Asia/Bangkok
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call container endpoint
+        env:
+          URL: ${{ secrets.CONTAINERAPP_TRIGGER_URL }}
+          TOKEN: ${{ secrets.TRIGGER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${URL:-}" ]]; then
+            echo "ERROR: CONTAINERAPP_TRIGGER_URL is not set"; exit 1
+          fi
+          NOW="$(date +'%Y-%m-%d %H:%M:%S %Z')"
+          DATA=$(printf '{"source":"github-actions","schedule":true,"at":"%s"}' "$NOW")
+          echo "POST $URL  ($NOW)"
+          if [[ -n "${TOKEN:-}" ]]; then
+            curl -sS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              --data "$DATA" -w "\nHTTP %{http_code}\n"
+          else
+            curl -sS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              --data "$DATA" -w "\nHTTP %{http_code}\n"
+          fi
