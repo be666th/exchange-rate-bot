@@ -1,33 +1,52 @@
-name: 📸 Screenshot and LINE Notify (Daily)
+name: Screenshot and Notify (BBL → Cloudinary → LINE)
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: '31 1 * * *'  # เวลาไทย 08:31 (UTC+7)
-  workflow_dispatch:       # สำหรับกดรันเองได้จาก GitHub UI
+    # GitHub cron is UTC. Bangkok (UTC+7): 08:32, 12:00, 15:00 → UTC 01:32, 05:00, 08:00
+    - cron: '32 1 * * 1-5'
+    - cron: '0 5 * * 1-5'
+    - cron: '0 8 * * 1-5'
+
+permissions:
+  contents: read
+
+# If a run is in progress, do NOT cancel; allow new runs to queue (so manual doesn't get canceled)
+concurrency:
+  group: screenshot_and_notify
+  cancel-in-progress: false
 
 jobs:
-  run-bot:
+  trigger:
     runs-on: ubuntu-latest
-
-    env:
-      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-      LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
-      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-
+    timeout-minutes: 15
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - name: Trigger Bot Webhook (initial try + 3 retries)
+        env:
+          WEBHOOK_URL: ${{ secrets.BOT_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK_URL:-}" ]; then
+            echo "❌ Missing secret BOT_WEBHOOK_URL"
+            exit 1
+          fi
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+          echo "▶️ POST $WEBHOOK_URL"
+          # initial try
+          if curl -fsS -m 30 -X POST "$WEBHOOK_URL" -H 'Content-Type: application/json' -d '{}'; then
+            echo "✅ Triggered (initial)"
+            exit 0
+          fi
 
-      - name: 📦 Install dependencies
-        run: pip install -r requirements.txt
+          # retry 3 times
+          for i in 1 2 3; do
+            echo "⏳ Retry $i/3 after 20s..."
+            sleep 20
+            if curl -fsS -m 30 -X POST "$WEBHOOK_URL" -H 'Content-Type: application/json' -d '{}'; then
+              echo "✅ Triggered (retry $i)"
+              exit 0
+            fi
+          done
 
-      - name: 🚀 Run Screenshot + LINE Notify
-        run: python runner.py
-
+          echo "❌ Failed after 3 retries"
+          exit 1
