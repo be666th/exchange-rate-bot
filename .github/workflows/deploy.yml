@@ -55,3 +55,11 @@ jobs:
               --name "${{ secrets.AZURE_CONTAINERAPP_NAME }}" \
               --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
               --image "$IMAGE"
+
+      - name: Login ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}   # เช่น myexchangeacr.azurecr.io
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+    
