@@ -1,43 +1,33 @@
-name: Screenshot and LINE Notify (Daily)
+name: 📸 Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
-    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok (UTC+7)
-    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok (UTC+7)
-  workflow_dispatch:
-
-concurrency:
-  group: screenshot-line-notify
-  cancel-in-progress: true
-
-env:
-  TZ: Asia/Bangkok
+    - cron: '31 1 * * *'  # เวลาไทย 08:31 (UTC+7)
+  workflow_dispatch:       # สำหรับกดรันเองได้จาก GitHub UI
 
 jobs:
-  trigger:
+  run-bot:
     runs-on: ubuntu-latest
+
+    env:
+      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+
     steps:
-      - name: Call container endpoint
-        env:
-          URL: ${{ secrets.CONTAINERAPP_TRIGGER_URL }}
-          TOKEN: ${{ secrets.TRIGGER_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${URL:-}" ]]; then
-            echo "ERROR: CONTAINERAPP_TRIGGER_URL is not set"; exit 1
-          fi
-          NOW="$(date +'%Y-%m-%d %H:%M:%S %Z')"
-          DATA=$(printf '{"source":"github-actions","schedule":true,"at":"%s"}' "$NOW")
-          echo "POST $URL  ($NOW)"
-          if [[ -n "${TOKEN:-}" ]]; then
-            curl -sS -X POST "$URL" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${TOKEN}" \
-              --data "$DATA" -w "\nHTTP %{http_code}\n"
-          else
-            curl -sS -X POST "$URL" \
-              -H "Content-Type: application/json" \
-              --data "$DATA" -w "\nHTTP %{http_code}\n"
-          fi
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 🚀 Run Screenshot + LINE Notify
+        run: python runner.py
+
