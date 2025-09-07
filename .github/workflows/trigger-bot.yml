@@ -1,0 +1,45 @@
+name: Trigger Bot HTTP Endpoint
+
+on:
+  schedule:
+    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok
+    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok
+    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok
+  workflow_dispatch:
+
+concurrency:
+  group: trigger-exchange-rate-bot
+  cancel-in-progress: true
+
+env:
+  TZ: Asia/Bangkok
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call container endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="${{ secrets.CONTAINERAPP_TRIGGER_URL }}"
+          if [[ -z "${URL}" ]]; then
+            echo "ERROR: CONTAINERAPP_TRIGGER_URL is not set"; exit 1
+          fi
+
+          # สร้าง payload ใส่ timestamp ไทย (เผื่อ debug ที่ฝั่งเซิร์ฟเวอร์)
+          NOW="$(date +'%Y-%m-%d %H:%M:%S %Z')"
+          DATA=$(jq -n --arg t "$NOW" '{source:"github-actions", schedule:true, at:$t}')
+
+          echo "POST $URL  ($NOW)"
+          # ถ้ามี TRIGGER_TOKEN จะส่งเป็น Bearer ให้ด้วย
+          if [[ -n "${{ secrets.TRIGGER_TOKEN }}" ]]; then
+            curl -sS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.TRIGGER_TOKEN }}" \
+              --data "$DATA" -w "\nHTTP %{http_code}\n"
+          else
+            curl -sS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              --data "$DATA" -w "\nHTTP %{http_code}\n"
+          fi

@@ -1,20 +1,20 @@
 name: Deploy Exchange Rate Bot
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".github/workflows/trigger-bot.yml"
   workflow_dispatch:
-  schedule:
-    - cron: "32 1 * * *"   # 08:32 Asia/Bangkok (UTC+7)
-    - cron: "0 5 * * *"    # 12:00 Asia/Bangkok (UTC+7)
-    - cron: "0 8 * * *"    # 15:00 Asia/Bangkok (UTC+7)
 
-# ป้องกันทับกันหากมีหลายทริกเกอร์ใกล้กัน
 concurrency:
-  group: exchange-rate-deploy
+  group: deploy-exchange-rate-bot
   cancel-in-progress: false
 
 permissions:
-  contents: read         # สำหรับ checkout โค้ด
-  id-token: write        # เผื่อใช้กับ Azure OIDC (ถ้าใช้ AZURE_CREDENTIALS ก็ไม่บังคับ)
+  contents: read
+  id-token: write
 
 env:
   TZ: Asia/Bangkok
@@ -23,52 +23,35 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v3
 
-      # ----- Login Azure (ใช้ Service Principal JSON เก็บไว้ใน AZURE_CREDENTIALS) -----
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # ----- Login Docker Registry (ACR) -----
-      - name: Docker login (ACR)
+      - name: Login ACR
         uses: azure/docker-login@v1
         with:
           login-server: ${{ secrets.AZURE_REGISTRY_SERVER }}
           username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
           password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
 
-      # ----- Build & Push Image -----
-      - name: Build & Push Docker image
+      - name: Build & Push image
         run: |
           IMAGE="${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest"
-          echo "Building $IMAGE"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
 
-      # ----- Deploy to Azure Container Apps -----
       - name: Deploy to Azure Container Apps
         uses: azure/cli@v2
         with:
           inlineScript: |
-            az extension add --name containerapp --upgrade -y
+            az extension add -n containerapp --upgrade -y
             IMAGE="${{ secrets.AZURE_REGISTRY_SERVER }}/exchange-rate-bot:latest"
-            echo "Updating Container App to image: $IMAGE"
             az containerapp update \
               --name "${{ secrets.AZURE_CONTAINERAPP_NAME }}" \
               --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
               --image "$IMAGE"
-
-      # (ออปชัน) ตรวจสุขภาพหลัง deploy
-      - name: Show Container App revision
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            az containerapp revision list \
-              --name "${{ secrets.AZURE_CONTAINERAPP_NAME }}" \
-              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-              --query "[0].{name:name,createdTime:createdTime,active:active}" -o table
