@@ -2,7 +2,7 @@ name: 📸 Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: '31 1 * * *'  # เวลาไทย 08:31 (UTC+7)
+    - cron: '31 0 * * *'  # เวลาไทย 07:31 (UTC+7)
   workflow_dispatch:       # สำหรับกดรันเองได้จาก GitHub UI
 
 jobs:
