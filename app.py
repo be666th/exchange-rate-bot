@@ -159,6 +159,31 @@ def find_jpy_row(driver):
     except Exception:
         return None
 
+def extract_jpy_rates(jpy_row) -> tuple[str, str]:
+    """ดึงอัตราซื้อ (TT Buying) และขาย (TT Selling) จากแถว JPY
+    คืนค่า (buying_rate, selling_rate) เป็น string เช่น ('19.76', '20.84')
+    """
+    try:
+        cells = jpy_row.find_elements(By.TAG_NAME, "td")
+        # กรองเฉพาะ cell ที่มีตัวเลขอัตราแลกเปลี่ยน (มีจุดทศนิยม)
+        numbers = []
+        for cell in cells:
+            txt = (cell.text or "").strip().replace(",", "")
+            try:
+                val = float(txt)
+                if val > 0:
+                    numbers.append(txt)
+            except ValueError:
+                pass
+        # Bangkok Bank: col 0=TT Buying, col 1=TT Selling (หรือ Buying/Selling คู่แรก)
+        if len(numbers) >= 2:
+            return numbers[0], numbers[-1]
+        elif len(numbers) == 1:
+            return numbers[0], numbers[0]
+    except Exception as e:
+        print(f"⚠️ extract_jpy_rates failed: {e}")
+    return "", ""
+
 # --- image utils ---
 from PIL import Image
 
@@ -206,6 +231,8 @@ def capture_and_send():
     jpy_captured = False
     fullpage_url = None
     jpy_image_url = None
+    jpy_buying = ""
+    jpy_selling = ""
 
     try:
         driver = new_driver()
@@ -238,6 +265,9 @@ def capture_and_send():
                 try:
                     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
                     time.sleep(0.2)
+                    # ดึงตัวเลขอัตราแลกเปลี่ยนก่อน screenshot
+                    jpy_buying, jpy_selling = extract_jpy_rates(jpy_row)
+                    print(f"💱 JPY rates — buying: {jpy_buying}, selling: {jpy_selling}")
                     jpy_row.screenshot(table_png)
                     # resize + optimize เป็น JPEG แล้ว upload ขึ้น Cloudinary
                     scaled_path = resize_image(table_png, scale=1.5)
@@ -280,6 +310,10 @@ def capture_and_send():
         # fallback: ส่ง fullpage screenshot แทนถ้าไม่ได้แถว JPY
         print("⚠️ JPY row image unavailable, sending fullpage as fallback.")
         safe_push_image(fullpage_url)
+
+    # ส่งตัวเลขอัตราแลกเปลี่ยน JPY แยกเป็น message สุดท้าย
+    if jpy_buying and jpy_selling:
+        safe_push_line(f"💱 JPY {jpy_buying} / {jpy_selling}")
 
 # ===== FastAPI routes =====
 @app.post("/")
