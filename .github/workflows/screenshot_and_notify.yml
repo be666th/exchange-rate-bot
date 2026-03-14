@@ -2,8 +2,13 @@ name: 📸 Screenshot and LINE Notify (Daily)
 
 on:
   schedule:
-    - cron: '1 0 * * 1-5'  # เวลาไทย 07:01 (UTC+7), จ.-ศ.
+    # ตั้งเวลา 08:17 Bangkok (UTC+7) = 01:17 UTC ทุกวัน
+    # เผื่อ GitHub Actions delay สูงสุด ~15 นาที เพื่อให้ข้อความถึงกลุ่มประมาณ 08:32 น.
+    - cron: '17 1 * * *'
   workflow_dispatch:
+  # รองรับ external cron service (เช่น cron-job.org) เพื่อ trigger แม่นยำกว่า
+  repository_dispatch:
+    types: [trigger-exchange-rate]
 
 
 jobs:
@@ -13,6 +18,8 @@ jobs:
     env:
       LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
       LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      # เพิ่ม GROUP_ID เพื่อให้ runner.py และ app.py ใช้งานได้ตรงกัน
+      GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
       CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}

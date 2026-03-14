@@ -9,7 +9,8 @@ load_dotenv()
 
 # ✅ Check critical env variables before running
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-GROUP_ID = os.getenv("GROUP_ID")
+# รองรับทั้ง GROUP_ID และ LINE_GROUP_ID (workflow ใช้ LINE_GROUP_ID)
+GROUP_ID = os.getenv("GROUP_ID") or os.getenv("LINE_GROUP_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 
 print("🔍 Verifying environment variables...")
@@ -18,7 +19,7 @@ missing = []
 if not LINE_CHANNEL_ACCESS_TOKEN:
     missing.append("LINE_CHANNEL_ACCESS_TOKEN")
 if not GROUP_ID:
-    missing.append("GROUP_ID")
+    missing.append("GROUP_ID / LINE_GROUP_ID")
 if not CLOUDINARY_CLOUD_NAME:
     missing.append("CLOUDINARY_CLOUD_NAME")
 

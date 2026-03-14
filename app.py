@@ -16,7 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from linebot import LineBotApi
-from linebot.models import TextSendMessage
+from linebot.models import TextSendMessage, ImageSendMessage
 from linebot.exceptions import LineBotApiError
 
 # ===== ENV & Clients =====
@@ -41,7 +41,7 @@ URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/
 def safe_push_line(text: str) -> bool:
     try:
         line_bot_api.push_message(GROUP_ID, TextSendMessage(text=text))
-        print("📩 LINE message sent.")
+        print("📩 LINE text message sent.")
         return True
     except LineBotApiError as e:
         print("❌ LineBotApiError status:", getattr(e, "status_code", None))
@@ -56,6 +56,25 @@ def safe_push_line(text: str) -> bool:
         return False
     except Exception as e:
         print("❌ LINE push failed (generic):", repr(e))
+        return False
+
+def safe_push_image(image_url: str) -> bool:
+    """ส่งรูปภาพเข้า LINE group ผ่าน ImageSendMessage"""
+    try:
+        line_bot_api.push_message(
+            GROUP_ID,
+            ImageSendMessage(
+                original_content_url=image_url,
+                preview_image_url=image_url
+            )
+        )
+        print("🖼️ LINE image sent:", image_url)
+        return True
+    except LineBotApiError as e:
+        print("❌ LINE image push error:", getattr(e, "status_code", None), repr(e))
+        return False
+    except Exception as e:
+        print("❌ LINE image push failed (generic):", repr(e))
         return False
 
 def upload_cloudinary(path: str, folder="exchange-rate") -> str:
@@ -186,6 +205,7 @@ def capture_and_send():
     driver = None
     jpy_captured = False
     fullpage_url = None
+    jpy_image_url = None
 
     try:
         driver = new_driver()
@@ -219,9 +239,13 @@ def capture_and_send():
                     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", jpy_row)
                     time.sleep(0.2)
                     jpy_row.screenshot(table_png)
-                    _ = resize_image(table_png, scale=1.5)  # ทำให้ชัด แต่เราไม่ใส่ลิงก์ภาพนี้ใน LINE
+                    # resize + optimize เป็น JPEG แล้ว upload ขึ้น Cloudinary
+                    scaled_path = resize_image(table_png, scale=1.5)
+                    jpy_image_url = upload_cloudinary(scaled_path, folder="exchange-rate")
+                    print(f"✅ JPY image uploaded: {jpy_image_url}")
                     jpy_captured = True
-                except Exception:
+                except Exception as e:
+                    print(f"⚠️ JPY capture/upload failed: {e}")
                     jpy_captured = False
             else:
                 jpy_captured = False
@@ -240,13 +264,22 @@ def capture_and_send():
 
     # ==== Compose message (Bangkok local time +7UTC) ====
     lines = [
-        f"Exchange Rate ({now_bkk} +7UTC) JPY",
-        "✅ Exchange Rate: JPY captured" if jpy_captured else "⚠️ Exchange Rate: JPY not found (fallback)",
+        f"📊 Exchange Rate ({now_bkk} +7UTC)",
+        "✅ JPY captured" if jpy_captured else "⚠️ JPY not found (fallback)",
     ]
     if fullpage_url:
-        lines.append(f"Fullpage: {fullpage_url}")
+        lines.append(f"🔗 Fullpage: {fullpage_url}")
 
+    # ส่ง text message ก่อน
     safe_push_line("\n".join(lines))
+
+    # ถ้าได้รูป JPY ให้ส่งรูปเข้า LINE ต่อทันที
+    if jpy_image_url:
+        safe_push_image(jpy_image_url)
+    elif fullpage_url:
+        # fallback: ส่ง fullpage screenshot แทนถ้าไม่ได้แถว JPY
+        print("⚠️ JPY row image unavailable, sending fullpage as fallback.")
+        safe_push_image(fullpage_url)
 
 # ===== FastAPI routes =====
 @app.post("/")
