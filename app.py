@@ -311,9 +311,9 @@ def capture_and_send():
         print("⚠️ JPY row image unavailable, sending fullpage as fallback.")
         safe_push_image(fullpage_url)
 
-    # ส่งตัวเลขอัตราแลกเปลี่ยน JPY แยกเป็น message สุดท้าย
-    if jpy_buying and jpy_selling:
-        safe_push_line(f"💱 JPY {jpy_buying} / {jpy_selling}")
+    # ส่งตัวเลขอัตราซื้อ JPY แยกเป็น message สุดท้าย
+    if jpy_buying:
+        safe_push_line(f"💱 JPY {jpy_buying}")
 
 # ===== FastAPI routes =====
 @app.post("/")
