@@ -77,7 +77,7 @@ docker run -p 8080:8080 --env-file .env exchange-rate-bot
 
 ## 📅 Cron Schedule
 
-The GitHub Actions workflow runs daily at 01:00 UTC (08:00 Thailand time) to redeploy and trigger the bot automatically.
+The GitHub Actions workflow runs daily at 01:32 UTC (08:32 Thailand time) to redeploy and trigger the bot automatically.
 
 Adjust cron in `.github/workflows/deploy.yml` as needed.
 
