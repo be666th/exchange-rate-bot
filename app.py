@@ -318,12 +318,13 @@ def capture_and_send():
 # ===== FastAPI routes =====
 @app.post("/")
 async def webhook(request: Request):
+    # รับ LINE webhook event แล้วตอบ 200 OK เฉยๆ
+    # ไม่ trigger capture_and_send() เพื่อไม่ให้ bot ตอบกลับทุกข้อความในกลุ่ม
     try:
         body = await request.json()
-        print("🔔 Received event:", body)
+        print("🔔 Received event (ignored):", body)
     except Exception:
         pass
-    capture_and_send()
     return JSONResponse(content={"message": "OK"}, status_code=200)
 
 @app.get("/health")
