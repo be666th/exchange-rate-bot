@@ -292,7 +292,7 @@ def capture_and_send():
             except Exception:
                 pass
 
-    # ==== Message 1: รวม text ทุกอย่างในข้อความเดียว ====
+    # ==== Message เดียว: text รวมทุกอย่าง ====
     image_url = jpy_image_url or fullpage_url or ""
     lines = [f"📊 Exchange Rate ({now_bkk} +7UTC)"]
     if image_url:
@@ -301,12 +301,6 @@ def capture_and_send():
         lines.append(f"💱 JPY {jpy_buying}")
 
     safe_push_line("\n".join(lines))
-
-    # ==== Message 2: รูปภาพ JPY ====
-    if jpy_image_url:
-        safe_push_image(jpy_image_url)
-    elif fullpage_url:
-        safe_push_image(fullpage_url)
 
 # ===== FastAPI routes =====
 @app.post("/")
