@@ -292,28 +292,21 @@ def capture_and_send():
             except Exception:
                 pass
 
-    # ==== Compose message (Bangkok local time +7UTC) ====
-    lines = [
-        f"📊 Exchange Rate ({now_bkk} +7UTC)",
-        "✅ JPY captured" if jpy_captured else "⚠️ JPY not found (fallback)",
-    ]
-    if fullpage_url:
-        lines.append(f"🔗 Fullpage: {fullpage_url}")
+    # ==== Message 1: รวม text ทุกอย่างในข้อความเดียว ====
+    image_url = jpy_image_url or fullpage_url or ""
+    lines = [f"📊 Exchange Rate ({now_bkk} +7UTC)"]
+    if image_url:
+        lines.append(f"🔗 {image_url}")
+    if jpy_buying:
+        lines.append(f"💱 JPY {jpy_buying}")
 
-    # ส่ง text message ก่อน
     safe_push_line("\n".join(lines))
 
-    # ถ้าได้รูป JPY ให้ส่งรูปเข้า LINE ต่อทันที
+    # ==== Message 2: รูปภาพ JPY ====
     if jpy_image_url:
         safe_push_image(jpy_image_url)
     elif fullpage_url:
-        # fallback: ส่ง fullpage screenshot แทนถ้าไม่ได้แถว JPY
-        print("⚠️ JPY row image unavailable, sending fullpage as fallback.")
         safe_push_image(fullpage_url)
-
-    # ส่งตัวเลขอัตราซื้อ JPY แยกเป็น message สุดท้าย
-    if jpy_buying:
-        safe_push_line(f"💱 JPY {jpy_buying}")
 
 # ===== FastAPI routes =====
 @app.post("/")
