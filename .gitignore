@@ -1,5 +1,10 @@
-echo "*.jpg" >> .gitignore
-echo "*.png" >> .gitignore
-echo "*.zip" >> .gitignore
-echo "*.jar" >> .gitignore
-echo "exchange-rate-bot.git/" >> .gitignore
+.env
+.env.docker
+*.jpg
+*.png
+*.zip
+*.jar
+*.html
+fallback.txt
+secrets.txt
+exchange-rate-bot.git/
