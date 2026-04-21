@@ -36,6 +36,7 @@ app = FastAPI()
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
 URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
+URL_SUPERRICH = "https://www.superrichthailand.com/#!/th"
 
 # -------- helpers --------
 def safe_push_line(text: str) -> bool:
@@ -217,6 +218,57 @@ def resize_image(path, scale=1.5) -> str:
         print(f"⚠️ Failed to resize image {path}: {e}")
         return to_jpeg_optimized(path)
 
+# -------- Super Rich scraper --------
+def scrape_superrich_jpy() -> str:
+    """ดึงอัตราซื้อ JPY จาก Super Rich Thailand
+    รูปแบบในเว็บ: '0.2035 THB = 1 JPY' → คืนค่า '0.2035'
+    """
+    driver = None
+    try:
+        driver = new_driver()
+        driver.get(URL_SUPERRICH)
+        wait = WebDriverWait(driver, 45)
+
+        # รอให้ตาราง/แถวที่มี JPY โหลดเสร็จ
+        jpy_el = wait.until(
+            lambda d: next(
+                (el for el in d.find_elements(By.XPATH, "//*[contains(text(),'JPY')]")
+                 if el.text.strip()),
+                None
+            )
+        )
+
+        # เดิน DOM ขึ้นไปหา row แม่ แล้วหาตัวเลขอัตราซื้อ
+        # Super Rich แสดง "0.2035 THB = 1 JPY" — ดึงตัวเลขแรกในแถว
+        row = jpy_el
+        for _ in range(5):
+            parent = row.find_element(By.XPATH, "..")
+            siblings = parent.find_elements(By.XPATH, ".//*")
+            for el in siblings:
+                txt = (el.text or "").strip().replace(",", "")
+                try:
+                    val = float(txt)
+                    if 0 < val < 10:  # อัตรา JPY/THB อยู่ในช่วง ~0.2x
+                        print(f"💱 Super Rich JPY buying: {txt}")
+                        return txt
+                except ValueError:
+                    pass
+            row = parent
+
+        print("⚠️ Super Rich JPY rate not found in DOM walk")
+        return ""
+
+    except Exception as e:
+        print(f"⚠️ scrape_superrich_jpy failed: {e}")
+        return ""
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
 # -------- main flow --------
 def capture_and_send():
     tz_bkk = pytz.timezone("Asia/Bangkok")
@@ -292,15 +344,27 @@ def capture_and_send():
             except Exception:
                 pass
 
-    # ==== Message เดียว: text รวมทุกอย่าง ====
-    image_url = jpy_image_url or fullpage_url or ""
-    lines = [f"📊 Exchange Rate ({now_bkk} +7UTC)"]
-    if image_url:
-        lines.append(f"🔗 {image_url}")
-    if jpy_buying:
-        lines.append(f"💱 JPY {jpy_buying}")
+    # ==== Super Rich ====
+    sr_jpy_buying = scrape_superrich_jpy()
 
-    safe_push_line("\n".join(lines))
+    # ==== Message เดียว: BBL + separator + Super Rich ====
+    image_url = jpy_image_url or fullpage_url or ""
+
+    bbl_lines = [f"📊 BBL — Exchange Rate ({now_bkk} +7UTC)"]
+    if image_url:
+        bbl_lines.append(f"🔗 {image_url}")
+    if jpy_buying:
+        bbl_lines.append(f"💱 JPY {jpy_buying}")
+
+    sr_lines = [
+        f"📊 SUPER RICH — Exchange Rate ({now_bkk} +7UTC)",
+        f"🔗 {URL_SUPERRICH}",
+    ]
+    if sr_jpy_buying:
+        sr_lines.append(f"💱 JPY {sr_jpy_buying}")
+
+    message = "\n".join(bbl_lines) + "\n*************************************\n" + "\n".join(sr_lines)
+    safe_push_line(message)
 
 # ===== FastAPI routes =====
 @app.post("/")
