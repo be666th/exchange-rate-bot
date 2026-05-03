@@ -1,13 +1,16 @@
 name: 📸 Screenshot and LINE Notify (Daily)
 
 on:
-  # ปิด GitHub Actions cron — ใช้ cron-job.org trigger แทน (แม่นยำกว่า)
-  # schedule:
-  #   - cron: '17 1 * * *'
   workflow_dispatch:
-  # รองรับ external cron service (เช่น cron-job.org) เพื่อ trigger แม่นยำกว่า
-  repository_dispatch:
-    types: [trigger-exchange-rate]
+    inputs:
+      type:
+        description: 'Message type to send'
+        required: true
+        type: choice
+        options:
+          - bbl
+          - superrich
+          - combined
 
 
 jobs:
@@ -17,14 +20,10 @@ jobs:
     env:
       LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
       LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
-      # เพิ่ม GROUP_ID เพื่อให้ runner.py และ app.py ใช้งานได้ตรงกัน
       GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
-      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
 
     steps:
-      - name: �� Checkout code
+      - name: 🛒 Checkout code
         uses: actions/checkout@v4
 
       - name: 🐍 Set up Python
@@ -36,4 +35,4 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 🚀 Run Screenshot + LINE Notify
-        run: python runner.py
+        run: python runner.py ${{ inputs.type }}
