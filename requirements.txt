@@ -2,11 +2,5 @@ fastapi
 uvicorn
 python-dotenv
 selenium
-cloudinary
 line-bot-sdk
-selenium
-cloudinary
-line-bot-sdk
-pillow
 pytz
-

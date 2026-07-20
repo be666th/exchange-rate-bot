@@ -1,4 +1,4 @@
-name: 📸 Screenshot and LINE Notify (Daily)
+name: Exchange Rate LINE Notify
 
 on:
   workflow_dispatch:
