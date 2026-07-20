@@ -1,11 +1,6 @@
 name: Deploy Exchange Rate Bot
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - ".github/workflows/trigger-bot.yml"
   workflow_dispatch:
 
 concurrency:
