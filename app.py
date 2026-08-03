@@ -368,7 +368,7 @@ def send_bbl():
     rate = scrape_bbl_jpy()
     bubble = _build_rate_bubble(
         label="BBL",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนธนาคารกรุงเทพ",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนธนาคารกรุงเทพ",
         rate=rate,
         link_label="BBL Rate",
         link_url=BBL_URL_DISPLAY,
@@ -382,7 +382,7 @@ def send_superrich():
     rate = scrape_superrich_jpy()
     bubble = _build_rate_bubble(
         label="SUPER RICH สีเขียว",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
         rate=rate,
         link_label="SUPER RICH สีเขียว Rate",
         link_url=SR_URL_DISPLAY,
@@ -396,7 +396,7 @@ def send_superrich_orange():
     rate = scrape_superrich_orange_jpy()
     bubble = _build_rate_bubble(
         label="SUPER RICH สีส้ม",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
         rate=rate,
         link_label="SUPER RICH สีส้ม Rate",
         link_url=SR_ORANGE_URL_DISPLAY,
@@ -415,7 +415,7 @@ def send_combined():
 
     bbl_bubble = _build_rate_bubble(
         label="BBL",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนธนาคารกรุงเทพ",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนธนาคารกรุงเทพ",
         rate=bbl_rate,
         link_label="BBL Rate",
         link_url=BBL_URL_DISPLAY,
@@ -424,7 +424,7 @@ def send_combined():
     )
     sr_bubble = _build_rate_bubble(
         label="SUPER RICH สีเขียว",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
         rate=sr_rate,
         link_label="SUPER RICH สีเขียว Rate",
         link_url=SR_URL_DISPLAY,
@@ -433,7 +433,7 @@ def send_combined():
     )
     sr_orange_bubble = _build_rate_bubble(
         label="SUPER RICH สีส้ม",
-        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
+        desc=f"📊 ({_bkk_now()}) -- อัตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
         rate=sr_orange_rate,
         link_label="SUPER RICH สีส้ม Rate",
         link_url=SR_ORANGE_URL_DISPLAY,
