@@ -12,7 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from linebot import LineBotApi
-from linebot.models import TextSendMessage
+from linebot.models import TextSendMessage, FlexSendMessage
 from linebot.exceptions import LineBotApiError
 
 # ===== ENV & Clients =====
@@ -24,13 +24,41 @@ app = FastAPI()
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
 URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
-URL_SUPERRICH = "https://www.superrichthailand.com/#!/th"
+URL_SUPERRICH = "https://www.superrichthailand.com/#!/th"                 # Super Rich สีเขียว
+URL_SUPERRICH_ORANGE = "https://superrich.co.th/currency.php"             # Super Rich สีส้ม
+
+# -------- Brand colors (ใช้ทั้งหัวข้อ/บรรทัดคำอธิบาย/ลิงก์ ตาม mockup ที่ตกลงกัน) --------
+COLOR_BBL_LABEL = "#666666"        # BBL: หัวข้อ/คำอธิบายเป็นสีเทากลาง
+COLOR_BBL_LINK = "#1976D2"         # BBL: ลิงก์เป็นสีฟ้า
+COLOR_SR_GREEN = "#1E8E3E"         # Super Rich สีเขียว: ทั้งหัวข้อ/คำอธิบาย/ลิงก์ เป็นสีเขียว
+COLOR_SR_ORANGE = "#F57C00"        # Super Rich สีส้ม: ทั้งหัวข้อ/คำอธิบาย/ลิงก์ เป็นสีส้ม
 
 # -------- helpers --------
 def safe_push_line(text: str) -> bool:
     try:
         line_bot_api.push_message(GROUP_ID, TextSendMessage(text=text))
         print("📩 LINE text message sent.")
+        return True
+    except LineBotApiError as e:
+        print("❌ LineBotApiError status:", getattr(e, "status_code", None))
+        err = getattr(e, "error", None)
+        if err:
+            print("   message:", getattr(err, "message", None))
+            if hasattr(err, "details"):
+                for d in err.details:
+                    print(f"   - {d.property}: {d.message}")
+        else:
+            print("   raw exception:", repr(e))
+        return False
+    except Exception as e:
+        print("❌ LINE push failed (generic):", repr(e))
+        return False
+
+def safe_push_flex(alt_text: str, contents: dict) -> bool:
+    """ส่ง LINE Flex Message (การ์ด) แทน text ธรรมดา"""
+    try:
+        line_bot_api.push_message(GROUP_ID, FlexSendMessage(alt_text=alt_text, contents=contents))
+        print("📩 LINE flex message sent.")
         return True
     except LineBotApiError as e:
         print("❌ LineBotApiError status:", getattr(e, "status_code", None))
@@ -141,9 +169,9 @@ def extract_jpy_rates(jpy_row) -> tuple[str, str]:
         print(f"⚠️ extract_jpy_rates failed: {e}")
     return "", ""
 
-# -------- Super Rich scraper --------
+# -------- Super Rich สีเขียว scraper --------
 def scrape_superrich_jpy() -> str:
-    """ดึงอัตราซื้อ JPY จาก Super Rich Thailand
+    """ดึงอัตราซื้อ JPY จาก Super Rich Thailand (สีเขียว)
     รูปแบบในเว็บ: '0.2035 THB = 1 JPY' → คืนค่า '0.2035'
     """
     driver = None
@@ -172,13 +200,13 @@ def scrape_superrich_jpy() -> str:
                 try:
                     val = float(txt)
                     if 0 < val < 10:  # อัตรา JPY/THB อยู่ในช่วง ~0.2x
-                        print(f"💱 Super Rich JPY buying: {txt}")
+                        print(f"💱 Super Rich (เขียว) JPY buying: {txt}")
                         return txt
                 except ValueError:
                     pass
             row = parent
 
-        print("⚠️ Super Rich JPY rate not found in DOM walk")
+        print("⚠️ Super Rich (เขียว) JPY rate not found in DOM walk")
         return ""
 
     except Exception as e:
@@ -192,9 +220,64 @@ def scrape_superrich_jpy() -> str:
                 pass
 
 
+# -------- Super Rich สีส้ม scraper (ใหม่) --------
+def scrape_superrich_orange_jpy() -> str:
+    """ดึงอัตราซื้อ JPY จาก Super Rich (สีส้ม, superrich.co.th)
+
+    ⚠️ หน้าเว็บนี้โหลดตารางอัตราด้วย JS/AJAX ไม่มี CSS class ตายตัวที่ยืนยันได้จากภายนอก
+    (ไม่มี headless browser ให้ตรวจสอบตอนเขียนโค้ดนี้) ใช้วิธี wait หาแถวที่มีคำว่า "JPY"
+    แล้วดึงตัวเลขในแถวเดียวกันแบบเดียวกับ Super Rich สีเขียว
+    ควรทดสอบจริงด้วย `python runner.py superrich_orange` — ถ้าไม่เจอ/ค่าไม่สมเหตุสมผล
+    (เช่น เว็บนี้อาจ quote JPY ต่อ 100 หน่วยแทนที่จะเป็นต่อ 1 หน่วย) ให้ปรับช่วงตัวเลขหรือ selector ตรงนี้
+    """
+    driver = None
+    try:
+        driver = new_driver()
+        driver.get(URL_SUPERRICH_ORANGE)
+        wait = WebDriverWait(driver, 45)
+
+        jpy_row = wait.until(
+            lambda d: next(
+                (row for row in d.find_elements(By.XPATH, "//tr[.//*[contains(text(),'JPY')]]")
+                 if row.text.strip()),
+                None
+            )
+        )
+
+        cells = jpy_row.find_elements(By.XPATH, ".//td | .//th | .//div | .//span")
+        numbers = []
+        for cell in cells:
+            txt = (cell.text or "").strip().replace(",", "")
+            try:
+                val = float(txt)
+                if val > 0:
+                    numbers.append(txt)
+            except ValueError:
+                pass
+
+        if numbers:
+            buying = numbers[0]
+            print(f"💱 Super Rich (ส้ม) JPY buying (raw, ยังไม่ยืนยันหน่วย): {buying} | full row text: {jpy_row.text!r}")
+            return buying
+
+        print(f"⚠️ Super Rich (ส้ม) JPY rate not found — row text: {jpy_row.text!r}")
+        return ""
+
+    except Exception as e:
+        print(f"⚠️ scrape_superrich_orange_jpy failed: {e}")
+        return ""
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
 # -------- Static display URLs --------
 BBL_URL_DISPLAY = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates"
-SR_URL_DISPLAY  = "https://www.superrichthailand.com/#!/th"
+SR_URL_DISPLAY = "https://www.superrichthailand.com/#!/th"        # Super Rich สีเขียว
+SR_ORANGE_URL_DISPLAY = "https://superrich.co.th"                 # Super Rich สีส้ม
 
 def _bkk_now() -> str:
     return datetime.now(pytz.timezone("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M")
@@ -228,39 +311,126 @@ def scrape_bbl_jpy() -> str:
             try: driver.quit()
             except Exception: pass
 
-# -------- 3 send functions --------
+# -------- Flex Message bubble builder --------
+def _build_rate_bubble(label: str, desc: str, rate: str, link_label: str, link_url: str,
+                        header_color: str, link_color: str) -> dict:
+    """สร้าง LINE Flex bubble ตาม mockup: หัวข้อ/คำอธิบาย -> ตัวเลขอัตราตัวใหญ่ -> ลิงก์กดได้"""
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": label,
+                    "size": "sm",
+                    "weight": "bold",
+                    "color": header_color,
+                },
+                {
+                    "type": "text",
+                    "text": desc,
+                    "size": "sm",
+                    "color": header_color,
+                    "wrap": True,
+                },
+                {
+                    "type": "text",
+                    "text": f"💱 JPY {rate}",
+                    "size": "3xl",
+                    "weight": "bold",
+                    "margin": "md",
+                    "wrap": True,
+                },
+                {
+                    "type": "text",
+                    "text": link_label,
+                    "size": "md",
+                    "weight": "bold",
+                    "color": link_color,
+                    "decoration": "underline",
+                    "margin": "md",
+                    "wrap": True,
+                    "action": {
+                        "type": "uri",
+                        "label": link_label[:20],
+                        "uri": link_url,
+                    },
+                },
+            ],
+        },
+    }
+
+# -------- 4 send functions --------
 def send_bbl():
     rate = scrape_bbl_jpy()
-    msg = (
-        f"📊 BBL — อัตตราแลกเปลี่ยนธนาคารกรุงเทพ ({_bkk_now()} +7UTC)\n"
-        f"🔗 {BBL_URL_DISPLAY}\n"
-        f"💱 JPY {rate}"
+    bubble = _build_rate_bubble(
+        label="BBL",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนธนาคารกรุงเทพ",
+        rate=rate,
+        link_label="BBL Rate",
+        link_url=BBL_URL_DISPLAY,
+        header_color=COLOR_BBL_LABEL,
+        link_color=COLOR_BBL_LINK,
     )
-    safe_push_line(msg)
+    safe_push_flex(f"BBL JPY {rate}", bubble)
 
 def send_superrich():
+    """Super Rich สีเขียว"""
     rate = scrape_superrich_jpy()
-    msg = (
-        f"📊 SUPER RICH — อัตตราแลกเปลี่ยน ({_bkk_now()} +7UTC)\n"
-        f"🔗 {SR_URL_DISPLAY}\n"
-        f"💱 JPY {rate}"
+    bubble = _build_rate_bubble(
+        label="SUPER RICH สีเขียว",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
+        rate=rate,
+        link_label="SUPER RICH สีเขียว Rate",
+        link_url=SR_URL_DISPLAY,
+        header_color=COLOR_SR_GREEN,
+        link_color=COLOR_SR_GREEN,
     )
-    safe_push_line(msg)
+    safe_push_flex(f"SUPER RICH สีเขียว JPY {rate}", bubble)
+
+def send_superrich_orange():
+    """Super Rich สีส้ม"""
+    rate = scrape_superrich_orange_jpy()
+    bubble = _build_rate_bubble(
+        label="SUPER RICH สีส้ม",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
+        rate=rate,
+        link_label="SUPER RICH สีส้ม Rate",
+        link_url=SR_ORANGE_URL_DISPLAY,
+        header_color=COLOR_SR_ORANGE,
+        link_color=COLOR_SR_ORANGE,
+    )
+    safe_push_flex(f"SUPER RICH สีส้ม JPY {rate}", bubble)
 
 def send_combined():
-    now = _bkk_now()
+    """BBL + Super Rich สีเขียว ในข้อความเดียว (carousel เลื่อนดูได้)"""
     bbl_rate = scrape_bbl_jpy()
-    sr_rate  = scrape_superrich_jpy()
-    msg = (
-        f"📊 BBL — อัตตราแลกเปลี่ยนธนาคารกรุงเทพ ({now} +7UTC)\n"
-        f"🔗 {BBL_URL_DISPLAY}\n"
-        f"💱 JPY {bbl_rate}\n"
-        f"**********************************\n"
-        f"📊 SUPER RICH — อัตตราแลกเปลี่ยน ({now} +7UTC)\n"
-        f"🔗 {SR_URL_DISPLAY}\n"
-        f"💱 JPY {sr_rate}"
+    sr_rate = scrape_superrich_jpy()
+
+    bbl_bubble = _build_rate_bubble(
+        label="BBL",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนธนาคารกรุงเทพ",
+        rate=bbl_rate,
+        link_label="BBL Rate",
+        link_url=BBL_URL_DISPLAY,
+        header_color=COLOR_BBL_LABEL,
+        link_color=COLOR_BBL_LINK,
     )
-    safe_push_line(msg)
+    sr_bubble = _build_rate_bubble(
+        label="SUPER RICH สีเขียว",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีเขียว",
+        rate=sr_rate,
+        link_label="SUPER RICH สีเขียว Rate",
+        link_url=SR_URL_DISPLAY,
+        header_color=COLOR_SR_GREEN,
+        link_color=COLOR_SR_GREEN,
+    )
+
+    carousel = {"type": "carousel", "contents": [bbl_bubble, sr_bubble]}
+    safe_push_flex(f"BBL JPY {bbl_rate} | SUPER RICH เขียว JPY {sr_rate}", carousel)
 
 # ===== FastAPI routes =====
 @app.post("/")
@@ -284,11 +454,13 @@ async def test_capture(type: str = None):
         send_bbl()
     elif type == "superrich":
         send_superrich()
+    elif type == "superrich_orange":
+        send_superrich_orange()
     elif type == "combined":
         send_combined()
     else:
         return JSONResponse(
-            content={"error": "Missing or invalid ?type= parameter. Valid values: bbl, superrich, combined."},
+            content={"error": "Missing or invalid ?type= parameter. Valid values: bbl, superrich, superrich_orange, combined."},
             status_code=400
         )
     return {"status": "triggered", "type": type}

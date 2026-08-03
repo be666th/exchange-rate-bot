@@ -1,6 +1,6 @@
 # runner.py
 # One-shot entry point for manual testing.
-# Usage: python runner.py [bbl|superrich|combined]
+# Usage: python runner.py [bbl|superrich|superrich_orange|combined]
 
 import sys
 from dotenv import load_dotenv
@@ -25,12 +25,14 @@ if missing:
 
 print("✅ All required env variables found.")
 
+VALID_TYPES = ("bbl", "superrich", "superrich_orange", "combined")
+
 msg_type = sys.argv[1] if len(sys.argv) > 1 else None
-if msg_type not in ("bbl", "superrich", "combined"):
-    print("❌ Usage: python runner.py [bbl|superrich|combined]")
+if msg_type not in VALID_TYPES:
+    print(f"❌ Usage: python runner.py [{'|'.join(VALID_TYPES)}]")
     exit(1)
 
-from app import send_bbl, send_superrich, send_combined
+from app import send_bbl, send_superrich, send_superrich_orange, send_combined
 
 print(f"🚀 Running send_{msg_type}() ...\n")
 try:
@@ -38,6 +40,8 @@ try:
         send_bbl()
     elif msg_type == "superrich":
         send_superrich()
+    elif msg_type == "superrich_orange":
+        send_superrich_orange()
     elif msg_type == "combined":
         send_combined()
     print(f"\n✅ Done — type={msg_type}")
