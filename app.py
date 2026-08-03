@@ -406,9 +406,12 @@ def send_superrich_orange():
     safe_push_flex(f"SUPER RICH สีส้ม JPY {rate}", bubble)
 
 def send_combined():
-    """BBL + Super Rich สีเขียว ในข้อความเดียว (carousel เลื่อนดูได้)"""
+    """BBL + Super Rich สีเขียว + Super Rich สีส้ม ในข้อความเดียว (carousel เลื่อนดูได้ 3 การ์ด)
+    ใช้สำหรับรอบแจ้งเตือนประจำวัน (เช่น 08:32 / 09:05 / 17:05) — ส่งครั้งเดียวครบทุกแหล่ง
+    """
     bbl_rate = scrape_bbl_jpy()
     sr_rate = scrape_superrich_jpy()
+    sr_orange_rate = scrape_superrich_orange_jpy()
 
     bbl_bubble = _build_rate_bubble(
         label="BBL",
@@ -428,9 +431,21 @@ def send_combined():
         header_color=COLOR_SR_GREEN,
         link_color=COLOR_SR_GREEN,
     )
+    sr_orange_bubble = _build_rate_bubble(
+        label="SUPER RICH สีส้ม",
+        desc=f"📊 ({_bkk_now()}) -- อัตตราแลกเปลี่ยนซุปเปอร์ริช สีส้ม",
+        rate=sr_orange_rate,
+        link_label="SUPER RICH สีส้ม Rate",
+        link_url=SR_ORANGE_URL_DISPLAY,
+        header_color=COLOR_SR_ORANGE,
+        link_color=COLOR_SR_ORANGE,
+    )
 
-    carousel = {"type": "carousel", "contents": [bbl_bubble, sr_bubble]}
-    safe_push_flex(f"BBL JPY {bbl_rate} | SUPER RICH เขียว JPY {sr_rate}", carousel)
+    carousel = {"type": "carousel", "contents": [bbl_bubble, sr_bubble, sr_orange_bubble]}
+    safe_push_flex(
+        f"BBL JPY {bbl_rate} | SR เขียว JPY {sr_rate} | SR ส้ม JPY {sr_orange_rate}",
+        carousel,
+    )
 
 # ===== FastAPI routes =====
 @app.post("/")
