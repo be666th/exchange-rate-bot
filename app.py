@@ -283,8 +283,8 @@ def _bkk_now() -> str:
     return datetime.now(pytz.timezone("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M")
 
 # -------- BBL scraper (rate only, no screenshot) --------
-def scrape_bbl_jpy() -> str:
-    """ดึงอัตราซื้อ JPY จาก Bangkok Bank (ไม่มี screenshot/Cloudinary)"""
+def _scrape_bbl_jpy_once() -> str:
+    """scrape BBL ครั้งเดียว — ใช้เรียกซ้ำจาก scrape_bbl_jpy()"""
     driver = None
     try:
         driver = new_driver()
@@ -310,6 +310,14 @@ def scrape_bbl_jpy() -> str:
         if driver:
             try: driver.quit()
             except Exception: pass
+
+def scrape_bbl_jpy() -> str:
+    """ดึงอัตราซื้อ JPY จาก Bangkok Bank — retry 1 ครั้งถ้าครั้งแรกได้ค่าว่าง"""
+    rate = _scrape_bbl_jpy_once()
+    if not rate:
+        print("🔄 BBL retry attempt 2...")
+        rate = _scrape_bbl_jpy_once()
+    return rate
 
 # -------- Flex Message bubble builder --------
 def _build_rate_bubble(label: str, desc: str, rate: str, link_label: str, link_url: str,
@@ -338,7 +346,7 @@ def _build_rate_bubble(label: str, desc: str, rate: str, link_label: str, link_u
                 },
                 {
                     "type": "text",
-                    "text": f"💱 JPY {rate}",
+                    "text": f"💱 JPY {rate if rate else 'N/A'}",
                     "size": "3xl",
                     "weight": "bold",
                     "margin": "md",
