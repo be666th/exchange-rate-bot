@@ -24,7 +24,7 @@ app = FastAPI()
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 
 URL_BBL = "https://www.bangkokbank.com/th-th/personal/other-services/view-rates/foreign-exchange-rates"
-URL_SUPERRICH = "https://www.superrichthailand.com/#!/th"                 # Super Rich สีเขียว
+URL_SUPERRICH = "https://www.superrichthailand.com/exchange-rate"          # Super Rich สีเขียว
 URL_SUPERRICH_ORANGE = "https://superrich.co.th/currency.php"             # Super Rich สีส้ม
 
 # -------- Brand colors (ใช้ทั้งหัวข้อ/บรรทัดคำอธิบาย/ลิงก์ ตาม mockup ที่ตกลงกัน) --------
@@ -276,8 +276,8 @@ def scrape_superrich_orange_jpy() -> str:
 
 # -------- Static display URLs --------
 BBL_URL_DISPLAY = "https://www.bangkokbank.com/th-TH/Personal/Other-Services/View-Rates/Foreign-Exchange-Rates"
-SR_URL_DISPLAY = "https://www.superrichthailand.com/#!/th"        # Super Rich สีเขียว
-SR_ORANGE_URL_DISPLAY = "https://superrich.co.th"                 # Super Rich สีส้ม
+SR_URL_DISPLAY = "https://www.superrichthailand.com/exchange-rate"  # Super Rich สีเขียว
+SR_ORANGE_URL_DISPLAY = "https://superrich.co.th/currency.php"    # Super Rich สีส้ม
 
 def _bkk_now() -> str:
     return datetime.now(pytz.timezone("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M")
